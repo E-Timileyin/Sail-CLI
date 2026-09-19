@@ -18,7 +18,6 @@ var rootCmd = &cobra.Command{
 	Long: `A lightweight tool for deploying Docker containers with rollback support.
 Complete documentation is available at https://github.com/E-Timileyin/Sail`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		// Initialize logger before any command runs
 		logger.Initialize(logger.Config{
 			Level:  logger.Level(logLevel),
 			Format: logFormat,
@@ -27,9 +26,6 @@ Complete documentation is available at https://github.com/E-Timileyin/Sail`,
 		return nil
 	},
 }
-
-// Execute adds all child commands to the root command and sets flags appropriately.
-// This is called by main.main(). It only needs to happen once to the rootCmd.
 
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
@@ -40,10 +36,8 @@ func Execute() {
 	}
 }
 func init() {
-	// Global flags
 	rootCmd.PersistentFlags().StringVarP(&logLevel, "log-level", "l", "info", "Log level (debug, info, warn, error)")
 	rootCmd.PersistentFlags().StringVar(&logFormat, "log-format", "text", "Log format (text or json)")
 
-	// Local flags (only for this command)
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }

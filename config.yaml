@@ -1,8 +1,3 @@
-# Sail config. Schema version 2 — see docs/adr/0001-target-architecture.md.
-#
-# This file holds NO secrets. It contains only the details needed to reach a server,
-# and a path to the SSH key that authenticates. Application secrets live in
-# apps/<name>/.env on the server (chmod 600); Sail references them, never stores them.
 version: 2
 
 app:
@@ -14,6 +9,4 @@ servers:
     host: your-server-ip
     port: 22
     user: deploy
-    # Path to the private key. Password authentication is not supported:
-    # Sail verifies host keys and connects with keys only.
     key_path: ~/.ssh/id_ed25519

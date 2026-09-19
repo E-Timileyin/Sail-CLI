@@ -9,12 +9,8 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// ClientConfig builds an ssh.ClientConfig for a server.
-//
-// This lives here rather than on the domain type because it reads a private key from
-// disk and performs host-key verification — I/O and crypto, which domain must not do.
-// It is the only constructor of ssh.ClientConfig in the codebase, which is what keeps
-// trust policy from being duplicated or quietly overridden at a call site.
+// ClientConfig is the codebase's only ssh.ClientConfig constructor. Here rather than on the
+// domain type: it reads a private key and verifies host keys.
 func ClientConfig(s *domain.Server) (*ssh.ClientConfig, error) {
 	authMethods, err := authMethods(s)
 	if err != nil {
@@ -54,7 +50,6 @@ func authMethods(s *domain.Server) ([]ssh.AuthMethod, error) {
 		return nil, fmt.Errorf("unable to parse private key %s (is it passphrase-protected?): %w", s.KeyPath, err)
 	}
 
-	// Password is deliberately not offered as an additional method: accepting it would
-	// let a config file reinstate a credential this project is removing from disk.
+	// Password is not offered as an additional method, so a config cannot reinstate it.
 	return []ssh.AuthMethod{ssh.PublicKeys(signer)}, nil
 }
