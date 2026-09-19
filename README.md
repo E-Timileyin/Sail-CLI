@@ -38,9 +38,9 @@ go build -o sail .
 
 ### Option 2: From a Release
 
-Not available yet: v0.1.0 has no attached binaries and there is no GoReleaser config.
-Once a release with assets exists, `go install github.com/E-Timileyin/Sail-CLI@latest`
-will work provided the module path matches the repository.
+Not available yet: v0.1.0 has no attached binaries. GoReleaser and the release workflow
+are now configured, so the next tag will publish archives. The command below works only
+once the module path and the repository URL agree (see #16).
 
 3.  **Run the executable:**
     ```bash

@@ -40,29 +40,35 @@ checksum:
   name_template: checksums.txt
 
 changelog:
-  # Group by the conventional-commit prefixes used in this repo, so release notes are
-  # readable without hand-editing.
+  # Group by the conventional-commit type, anchored at the start of the subject. Keep these
+  # anchored and separator-terminated: an earlier version used '^.*?(security|...).*$',
+  # which matches any line at all, so first-match-wins sent every commit to Security.
+  # Order matters: the scope-specific Security rule must precede plain Fixes, since
+  # 'fix(security):' matches both.
   groups:
     - title: Security
-      regexp: '^.*?(security|fix\(security\)).*$'
+      regexp: '^(security|fix\(security\))(\(|:)'
       order: 0
     - title: Fixes
-      regexp: '^.*?fix.*$'
+      regexp: '^fix(\(|:)'
       order: 1
     - title: Features
-      regexp: '^.*?feat.*$'
+      regexp: '^feat(\(|:)'
       order: 2
     - title: Documentation
-      regexp: '^.*?docs.*$'
+      regexp: '^docs(\(|:)'
       order: 3
     - title: Other
       order: 999
   filters:
+    # Anchored with the type separator so 'chore' does not exclude a commit like
+    # 'choreography-aware deploy'.
     exclude:
-      - '^chore'
-      - '^style'
+      - '^chore(\(|:|!| )'
+      - '^style(\(|:|!| )'
+      - '^test(\(|:|!| )'
+      - '^ci(\(|:|!| )'
       - '^Merge (branch|pull request)'
-      - '^test'
 
 release:
   draft: false
@@ -81,6 +87,6 @@ release:
     Verify the checksum first if you prefer strict supply chain hygiene:
     `checksums.txt` is attached to this release.
 
-    **This release changes the config schema.** `config.yaml` now requires `version: 2`,
-    and a v0.1.0 config is rejected with guidance rather than silently reinterpreted.
-    See the [README](https://github.com/E-Timileyin/Sail-CLI#readme) for the current schema.
+    **Config schema.** `config.yaml` requires `version: 2`. A v0.1.0 config is rejected
+    with guidance rather than silently reinterpreted. See the
+    [README](https://github.com/E-Timileyin/Sail-CLI#readme) for the current schema.
