@@ -1,171 +1,116 @@
-# Sail — Onboarding Guide
+# Onboarding
 
-Welcome. This guide gets you from a fresh clone to running a deploy, and points you at the
-parts of the codebase you'll touch first. Read `docs/ARCHITECTURE.md` alongside this.
+Getting Sail running, and finding your way around the code.
 
----
-
-## 1. What Sail is (in one paragraph)
-
-Sail is a Go CLI that deploys Dockerized applications to remote servers over SSH, with
-automatic backup and rollback. It sits between "manual `docker-compose` over SSH" and a
-full CI/CD platform: push-button, repeatable, rollback-safe deploys for a handful of
-servers, with nothing to install on the target beyond Docker.
+Read [ARCHITECTURE.md](ARCHITECTURE.md) for how it fits together, and the
+[ADRs](adr/) for why it was built this way.
 
 ---
 
-## 2. Prerequisites
-
-- **Go 1.25+** (see `go.mod`)
-- **Docker** running locally (needed for the SDK-based code paths and tests that touch it)
-- **SSH access** to at least one target server for real deploys
-- On target servers: **Docker + Docker Compose** installed
-
----
-
-## 3. First run
+## 1. Build and run
 
 ```bash
-# Clone and enter
-git clone https://github.com/E-Timileyin/Sail.git
-cd Sail
-
-# Build
+git clone https://github.com/E-Timileyin/Sail-CLI.git
+cd Sail-CLI
 go build -o sail .
-
-# See available commands
 ./sail --help
-
-# Run the test suite
-go test -v ./...
 ```
 
-Install as a CLI (optional):
+`go install ...@latest` does **not** work yet: `go.mod` declares
+`github.com/E-Timileyin/sail` while the repo is `E-Timileyin/Sail-CLI`, and `go install`
+resolves via the module path. Tracked as an issue.
 
-```bash
-go install github.com/E-Timileyin/sail@latest   # puts `sail` in $GOPATH/bin
-```
+## 2. Config
 
----
-
-## 4. Configuration files
-
-Sail reads a YAML config describing your servers (and, for the Orchestrator path,
-deployment settings).
-
-### `config.yaml` — servers
+Create `config.yaml`. It requires `version: 2` and holds no secrets:
 
 ```yaml
+version: 2
 app:
   name: Sail
   environment: development
-
-deployment:
-  container_name: sail-api
-  dockerfile: ./Dockerfile
-  port: 8080
-
 servers:
   - name: production
     host: your-server-ip
-    port: 22
     user: deploy
-    key_path: ~/.ssh/your_private_key   # preferred
-    # password: ...                      # fallback (avoid committing real secrets)
+    key_path: ~/.ssh/id_ed25519
 ```
 
-> **Security note:** the example config ships with a plaintext `password:`. Do **not** commit
-> real credentials. Prefer `key_path`. See `docs/fixes/05-secrets-handling.md`.
+A v0.1.0-style config is rejected with guidance rather than reinterpreted. `password:` is
+gone; password auth is not supported, because Sail verifies host keys and a config file
+should not carry a credential.
 
-### `deployment.yaml` — application settings (Orchestrator path)
-
-```yaml
-image: your-docker-image
-tag: latest
-container_name: my-app
-ports:
-  "8080": "80"
-environment:
-  NODE_ENV: production
-restart_policy: unless-stopped   # always | unless-stopped | on-failure | no
-health_check:
-  test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-  interval: 2s
-  timeout: 30s
-  retries: 5
-```
-
----
-
-## 5. Common commands
+## 3. Commands
 
 ```bash
-# Deploy to every server in the config
-./sail deploy config.yaml
-
-# SSH into a named server (optionally run a one-off command)
-./sail ssh production
-./sail ssh production "docker ps"
-
-# Start the app server locally (placeholder today)
-./sail serve --port 8080
-
-# Global flags (work on any command)
-./sail deploy config.yaml --log-level debug --log-format json
+./sail app new my-api --image ghcr.io/you/my-api --port 8080   # scaffold on the server
+./sail deploy my-api --tag $(git rev-parse --short HEAD)       # deploy a tag
+./sail status my-api                                            # recorded tag + container state
+./sail rollback my-api                                          # back to the previous tag
+./sail logs my-api --tail 100
+./sail history my-api
+./sail app rm my-api --yes                                      # deletes its .env
 ```
 
-> `--dry-run` prints the plan and changes nothing. `--accept-new` records an unknown host
-> key in `known_hosts` on first connect (OpenSSH's `StrictHostKeyChecking=accept-new`).
-> `--skip-backup` and `--force-rebuild` were removed — see
-> `docs/fixes/01-exit-codes-and-flags.md`.
+`--dry-run` prints the plan without connecting, so it works on a machine with no key and
+no config. `--accept-new` records an unknown host key on first connect.
 
----
+## 4. Secrets
 
-## 6. Codebase tour — where to look first
+`app new` creates `<srv-root>/<app>/.env` empty, mode 600, and **never overwrites an
+existing one**. Put the app's secrets in it yourself. Sail's config holds no secrets, and
+nothing in the repo should.
 
-| You want to…                                  | Start in…                                      |
-|-----------------------------------------------|------------------------------------------------|
-| Add or change a CLI command                   | `cmd/` (each command is one file)              |
-| Change how config is loaded                   | `internal/config/loader.go`                    |
-| Change server/deploy data shapes              | `internal/model/`                              |
-| Change how Docker is driven (SDK)             | `internal/container/` (preferred) or `internal/docker/` |
-| Change deploy/rollback logic                  | `internal/workflows/orchestrator.go`           |
-| Change logging                                | `internal/logger/`                             |
+## 5. Code tour
 
-### The mental model
+| You want to change… | Start in… |
+|---|---|
+| A CLI flag or command | `cmd/` |
+| What a deploy does, step by step | `internal/remote/deployer.go` |
+| The remote commands themselves | `internal/remote/plan.go` |
+| The generated compose file | `internal/remote/templates.go` |
+| Host-key or auth policy | `internal/sshx/` |
+| Config parsing and validation | `internal/config/loader.go` |
+| Types shared across packages | `internal/domain/types.go` |
 
-- `cmd/deploy.go` is the **live** deploy path: SSH in, run `docker-compose` remotely.
-- `internal/workflows` + `internal/docker` is a **richer SDK-based** deploy with real
-  rollback — but it isn't wired into the CLI yet.
-- `internal/container/` is the **target refactor**: clean interfaces, dependency injection,
-  and unit tests. New Docker work should go here.
+Two rules worth knowing before you edit:
 
-Read `docs/ARCHITECTURE.md` §5–6 to understand this three-way split before making changes.
+1. **Never build an `ssh.ClientConfig` outside `sshx`, and never dial outside
+   `internal/remote.Runner`.** Host-key verification duplicated across call sites is how
+   `InsecureIgnoreHostKey()` survived in two places. There is a test that fails the build
+   if it returns.
+2. **Every config struct needs both `yaml` and `mapstructure` tags.** Viper reads
+   `mapstructure`; with yaml-only tags, multi-word keys silently unmarshal empty.
 
----
-
-## 7. How to test your changes
+## 6. Tests
 
 ```bash
-go test ./...                          # everything
-go test ./internal/container/...       # a single package
-go test -run TestName ./internal/...   # a single test
+go test ./... -race           # everything
+go test ./internal/remote/    # one package
+go test ./internal/sshx/ -run TestHandshake -v
 ```
 
-The `container/service` package is designed for unit testing via
-`NewContainerServiceWithClient(mock)` — inject a fake `DockerClient` and assert behavior
-without a real Docker daemon. Mirror that pattern for new service code.
+No test needs a server. SSH tests start an in-process server; the deploy state machine
+uses a fake executor.
 
----
+## 7. Before opening a PR
 
-## 8. Contributing checklist
+```bash
+gofmt -l .        # must be empty
+go vet ./...
+go test ./... -race
+```
 
-- [ ] New Docker functionality goes in `internal/container/` behind an interface.
-- [ ] Wrap errors with `%w` so callers can `errors.Is/As`.
-- [ ] Thread `context.Context` through anything that does I/O.
-- [ ] Inject the `logrus.Logger` rather than reaching for a global.
-- [ ] Add/adjust tests; run `go test ./...` and `go vet ./...`.
-- [ ] Don't commit real secrets. Prefer SSH keys over passwords.
+CI runs these plus `go mod tidy` verification and `govulncheck`. See
+[CONTRIBUTING.md](../CONTRIBUTING.md).
 
-See `CONTRIBUTING.md` for the PR process, and `docs/fixes/` for the current improvement
-roadmap if you're looking for a first task.
+## 8. Where to start
+
+Open issues are the source of truth for what needs doing. Good first issues are labelled.
+The highest-value work right now:
+
+- **Verify the health gate against a real daemon.** Everything depends on
+  `docker compose up -d --wait` exiting non-zero for an unhealthy container, and that is
+  only asserted against a fake.
+- **`sail init`** — scaffold a Dockerfile, `.dockerignore` and a CI workflow locally.
+- **GoReleaser** — so releases have binaries and install does not need a Go toolchain.
