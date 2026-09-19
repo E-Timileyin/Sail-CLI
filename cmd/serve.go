@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/E-Timileyin/sail/internal/logger"
 	"github.com/spf13/cobra"
 )
 
@@ -17,20 +16,11 @@ var serveCmd = &cobra.Command{
 	Use:   "serve",
 	Short: "Start the application server",
 	Long:  `Start the HTTP/HTTPS server to serve the application.`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		if autoDeploy {
-			if err := runDeploy(cmd, []string{configFile}); err != nil {
-				return fmt.Errorf("deployment failed: %v", err)
-			}
-		}
+	RunE:  runServe,
+}
 
-		logger.Log.Infof("Starting server on port %s...", serverPort)
-		// TODO: not implemented. serve is a stub; --deploy chains a deploy, then this
-		// prints and exits without listening.
-
-		logger.Log.Info("Server started successfully")
-		return nil
-	},
+func runServe(cmd *cobra.Command, args []string) error {
+	return fmt.Errorf("serve is not implemented yet; no server was started")
 }
 
 func init() {
