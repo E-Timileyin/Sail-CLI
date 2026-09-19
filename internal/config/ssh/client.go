@@ -8,15 +8,16 @@ import (
 	"time"
 
 	"github.com/E-Timileyin/sail/internal/model"
+	"github.com/E-Timileyin/sail/internal/sshx"
 	"golang.org/x/crypto/ssh"
 )
 
 // CommandResult represents the result of an SSH command execution.
 type CommandResult struct {
-	Command string // The command that was executed
-	Status  string // Command status (e.g., "success", "fail")
-	Message string // Command output or error message
-	Error   error  // Any error that occurred
+	Command string
+	Status  string
+	Message string
+	Error   error
 }
 
 // ExecuteSSHCommand executes a command on a remote server via SSH.
@@ -40,21 +41,30 @@ func ExecuteSSHCommand(cfg model.ServerStruct, command string) (*CommandResult, 
 		return result, result.Error
 	}
 
-	// 2. Configure SSH client
+	// 2. Configure SSH client. Host keys are verified against known_hosts via sshx;
+	// the previous ssh.InsecureIgnoreHostKey() call here meant this helper accepted
+	// any key, so a MITM could impersonate the server for every command it ran.
+	hostKeyCallback, err := sshx.HostKeyCallback(cfg.KnownHostsPath, cfg.TrustPolicy, cfg.Address())
+	if err != nil {
+		result.Status = "fail"
+		result.Error = err
+		return result, err
+	}
+
 	config := &ssh.ClientConfig{
 		User: cfg.User,
 		Auth: []ssh.AuthMethod{
 			ssh.PublicKeys(signer),
 		},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(), // In production, use proper host key verification
+		HostKeyCallback: hostKeyCallback,
 		Timeout:         15 * time.Second,
 	}
 
 	// 3. Connect to the server
-	client, err := ssh.Dial("tcp", cfg.Host, config)
+	client, err := ssh.Dial("tcp", cfg.Address(), config)
 	if err != nil {
 		result.Status = "fail"
-		result.Error = fmt.Errorf("failed to connect to %s: %w", cfg.Host, err)
+		result.Error = fmt.Errorf("failed to connect to %s: %w", cfg.Address(), err)
 		return result, result.Error
 	}
 	defer client.Close()

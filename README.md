@@ -20,41 +20,34 @@ Built with **Go**, **Cobra**, and **Viper**, `Sail` automates container updates,
 
 There are two ways to install and use Sail.
 
-### Option 1: As a CLI Tool (Recommended)
+> **⚠️ Install note.** The v0.1.0 release shipped **no binary artifacts**, and the
+> `go install github.com/E-Timileyin/sail@latest` command it advertised **does not
+> resolve**: `go install` fetches from the module path declared in `go.mod`, which is
+> `github.com/E-Timileyin/sail`, and no repository exists at that path (the repo is
+> `E-Timileyin/Sail-CLI`). Until the module path is corrected and a Release with assets
+> is published, **install from source**.
 
-If you have Go installed, you can install the `sail` command directly from GitHub:
+### Option 1: From Source (works today)
 
 ```bash
-# Install the latest version
-go install github.com/E-Timileyin/sail@latest
-
-# Verify the installation
-sail --version
+git clone https://github.com/E-Timileyin/Sail-CLI.git
+cd Sail-CLI
+go build -o sail .
+./sail --help
 ```
 
-This will download the source, compile it, and place the `sail` binary in your Go bin directory (`$GOPATH/bin`).
+### Option 2: From a Release
 
-### Option 2: From Source
-
-If you prefer to build from the source code yourself:
-
-1.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/E-Timileyin/Sail.git
-    cd Sail
-    ```
-
-2.  **Build the binary:**
-    ```bash
-    go build -o sail .
-    ```
+Not available yet: v0.1.0 has no attached binaries and there is no GoReleaser config.
+Once a release with assets exists, `go install github.com/E-Timileyin/Sail-CLI@latest`
+will work provided the module path matches the repository.
 
 3.  **Run the executable:**
     ```bash
     ./sail --help
     ```
 
-4.  **(Optional) Move it to your PATH:**
+3.  **(Optional) Move it to your PATH:**
     ```bash
     sudo mv sail /usr/local/bin/
     ```
@@ -63,45 +56,42 @@ If you prefer to build from the source code yourself:
 
 ### 1. Configuration
 
-Create a `servers.yaml` file to define your target servers:
+Create a `config.yaml`. It requires `version: 2` and holds **no secrets** —
+application secrets live in `apps/<name>/.env` on the server (chmod 600).
 
 ```yaml
-# servers.yaml
-- name: production
-  host: your-server-ip
-  port: 22
-  user: deploy
-  key_path: ~/.ssh/your_private_key
+# config.yaml
+version: 2
+
+app:
+  name: Sail
+  environment: production
+
+servers:
+  - name: production
+    host: your-server-ip
+    port: 22
+    user: deploy
+    key_path: ~/.ssh/id_ed25519
 ```
 
-### 2. Deployment Configuration
+Sail verifies host keys against `~/.ssh/known_hosts`. On first connect to a new host,
+pass `--accept-new`, which records the key (the same behaviour as OpenSSH's
+`StrictHostKeyChecking=accept-new`). A host whose key has changed is always refused.
 
-Create a `deployment.yaml` file to define your application's deployment settings:
-
-```yaml
-# deployment.yaml
-image: your-docker-image
-tag: latest
-containerName: my-app-container
-ports:
-  "8080": "80"
-environment:
-  NODE_ENV: "production"
-  API_KEY: "your-secret-key"
-restartPolicy: "unless-stopped" # Can be: always, unless-stopped, on-failure, no
-```
+Password authentication is not supported.
 
 ### 2. Basic Commands
 
 ```bash
-# Deploy your application
-./sail deploy deployment.yaml
+# Deploy, showing the plan without changing anything
+./sail deploy config.yaml --dry-run
 
-# Start the application locally
-./sail serve deployment.yaml
+# First deploy to a new server: record its host key, then deploy
+./sail deploy config.yaml --accept-new
 
 # SSH into the configured server
-./sail ssh production  # Uses the server name from config
+./sail ssh production
 
 # Show version information
 ./sail --version
@@ -110,15 +100,19 @@ restartPolicy: "unless-stopped" # Can be: always, unless-stopped, on-failure, no
 ### 3. Advanced Deployment Options
 
 ```bash
-# Dry run (show what would be deployed)
+# Dry run: print the plan, connect to nothing, change nothing
 ./sail deploy config.yaml --dry-run
 
-# Skip backup of current deployment
-./sail deploy config.yaml --skip-backup
+# Trust a new host on first connect and record its key in known_hosts
+./sail deploy config.yaml --accept-new
 
-# Force rebuild of Docker image
-./sail deploy config.yaml --force-rebuild
+# Use an alternate known_hosts file
+./sail deploy config.yaml --known-hosts /path/to/known_hosts
 ```
+
+`--skip-backup` and `--force-rebuild` were removed. `--skip-backup` never did anything
+(the SSH path created no backup), and `--force-rebuild` implied building on the target
+server, which defeats the purpose of building locally or in CI.
 
 ## 🧪 Testing
 
@@ -133,26 +127,40 @@ This will run all unit and integration tests and provide detailed output.
 ## 🔧 Features
 
 - **Automated Deployments**: Deploy your Docker containers with a single command.
-- **Automatic Rollbacks**: Automatically reverts to the last known good version if a deployment fails.
-- **SSH Integration**: Secure server access with SSH key or password authentication.
-- **Environment Management**: Manage different environments (dev, staging, production).
-- **Lightweight**: No heavy CI/CD setup required.
+- **Host-key verification**: SSH host keys are checked against `known_hosts`; a changed
+  key is refused rather than trusted.
+- **Honest exit codes**: a failed deploy exits non-zero, so CI cannot mark it green.
+- **Dry run**: `--dry-run` prints the plan and changes nothing.
+- **Multi-server**: deploys to every configured server, reports which failed.
+- **Key-only SSH**: no plaintext passwords in config, ever.
 
 ### Upcoming Features
 
-- **Enhanced Health Checks**: Implement more robust, application-level health checks.
-- **Deployment History**: Track and list past deployments.
-- **Improved Testing**: Increase test coverage with integration and mocked tests.
-- **Secure SSH**: Remove `ssh.InsecureIgnoreHostKey()` in favor of proper host key verification.
-- **Pre/Post Deployment Hooks**: Allow users to run custom scripts before and after deployments.
+These are **not implemented yet**. They are listed so the gap is visible, not claimed.
+
+- **Automatic Rollbacks**: reverts to the previous tag when a deploy fails. The
+  `internal/workflows` machinery exists but is unreachable from the CLI — see
+  `docs/adr/0001-target-architecture.md`.
+- **Real health checks**: gating on the container's own `HEALTHCHECK` via
+  `docker compose up -d --wait`.
+- **Deployment History**: `sail history`, from an append-only log on the server.
+- **Server-side agent**: `sail agent` as a forced-command SSH key, so a leaked CI key
+  cannot obtain a shell.
+- **Scaffolding**: `sail bootstrap`, `sail app new`, `sail init --stack go|node|next`.
+- **Pre/Post Deployment Hooks**.
+
+See `docs/fixes/README.md` for status and `fixes.md` for the roadmap.
 
 ## 🔒 Security Best Practices
 
-1. **Use SSH Keys**: Always prefer SSH key authentication over passwords
-2. **Environment Variables**: Store sensitive data in environment variables or use a secrets manager
-3. **Least Privilege**: Use a dedicated deployment user with minimal required permissions
-4. **Firewall**: Ensure only necessary ports are open on your server
-5. **Regular Updates**: Keep Docker and your system packages up to date
+1. **Use SSH Keys**: key authentication only; passwords are not supported.
+2. **Verify host keys on first connect**: use `--accept-new` deliberately, then review
+   the entry it writes to `~/.ssh/known_hosts`.
+3. **Keep secrets off the repo**: application secrets belong in `apps/<name>/.env` on the
+   server (chmod 600), never in `config.yaml`.
+4. **Least Privilege**: use a dedicated deployment user with minimal permissions.
+5. **Firewall**: expose only the ports you need.
+6. **Regular Updates**: keep Docker and system packages current.
 
 ## 🐛 Troubleshooting
 
@@ -184,7 +192,8 @@ Failed to connect: ssh: handshake failed: ssh: unable to authenticate...
   ```bash
   chmod 600 ~/.ssh/id_rsa
   ```
-- If using password authentication, ensure the user has login permissions
+- Verify your SSH key is loaded and the path in `key_path` is correct.
+- Password authentication is not supported; use a key.
 
 ## 🤝 Contributing
 

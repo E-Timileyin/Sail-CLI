@@ -7,7 +7,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Define the flags at the package level
 var (
 	autoDeploy bool
 	configFile string

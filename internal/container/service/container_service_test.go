@@ -98,7 +98,7 @@ func TestContainerService_List(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Reset mock expectations
 			mockClient.ExpectedCalls = nil
-			
+
 			tt.setupMock()
 			svc := NewContainerServiceWithClient(mockClient)
 
@@ -152,7 +152,7 @@ func TestContainerService_Create(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Reset mock expectations
 			mockClient.ExpectedCalls = nil
-			
+
 			tt.setupMock()
 			svc := NewContainerServiceWithClient(mockClient)
 
@@ -197,7 +197,7 @@ func TestContainerService_Start(t *testing.T) {
 			mockClient := new(MockDockerClient)
 			// Reset mock expectations
 			mockClient.ExpectedCalls = nil
-			
+
 			tt.setupMock(mockClient)
 			svc := NewContainerServiceWithClient(mockClient)
 
@@ -240,7 +240,7 @@ func TestContainerService_Stop(t *testing.T) {
 			mockClient := new(MockDockerClient)
 			// Reset mock expectations
 			mockClient.ExpectedCalls = nil
-			
+
 			tt.setupMock(mockClient)
 			svc := NewContainerServiceWithClient(mockClient)
 
@@ -283,7 +283,7 @@ func TestContainerService_Remove(t *testing.T) {
 			mockClient := new(MockDockerClient)
 			// Reset mock expectations
 			mockClient.ExpectedCalls = nil
-			
+
 			tt.setupMock(mockClient)
 			svc := NewContainerServiceWithClient(mockClient)
 
@@ -329,7 +329,7 @@ func TestContainerService_Inspect(t *testing.T) {
 			mockClient := new(MockDockerClient)
 			// Reset mock expectations
 			mockClient.ExpectedCalls = nil
-			
+
 			tt.setupMock(mockClient)
 			svc := NewContainerServiceWithClient(mockClient)
 

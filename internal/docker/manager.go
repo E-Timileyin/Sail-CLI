@@ -63,7 +63,7 @@ func (m *Manager) ContainerStatus(ctx context.Context, name string) (string, err
 // PullImage pulls the latest version of a Docker image
 func (m *Manager) PullImage(ctx context.Context, imageRef string) error {
 	m.logger.Infof("Pulling image: %s", imageRef)
-	
+
 	// Check if image already exists locally
 	_, _, err := m.client.ImageInspectWithRaw(ctx, imageRef)
 	if err == nil {
@@ -96,7 +96,7 @@ func (m *Manager) PullImage(ctx context.Context, imageRef string) error {
 // CreateContainer creates a new container with the specified configuration
 func (m *Manager) CreateContainer(ctx context.Context, name, image string, config *container.Config, hostConfig *container.HostConfig) (string, error) {
 	m.logger.Infof("Creating container: %s", name)
-	
+
 	// Remove container if it already exists
 	_ = m.StopContainer(ctx, name)
 	_ = m.RemoveContainer(ctx, name)
@@ -124,17 +124,17 @@ func (m *Manager) StartContainer(ctx context.Context, name string) error {
 func (m *Manager) StopContainer(ctx context.Context, name string) error {
 	timeout := 10 // seconds
 	m.logger.Infof("Stopping container: %s", name)
-	
+
 	// Create a context with timeout
 	timeoutCtx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
 	defer cancel()
-	
+
 	// Create stop options with the timeout
 	stopOptions := container.StopOptions{
 		Signal:  "SIGTERM",
 		Timeout: &timeout,
 	}
-	
+
 	if err := m.client.ContainerStop(timeoutCtx, name, stopOptions); err != nil {
 		// If container is already stopped, we can continue
 		if !client.IsErrNotFound(err) {

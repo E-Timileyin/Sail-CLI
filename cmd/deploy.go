@@ -3,127 +3,181 @@ package cmd
 import (
 	"bytes"
 	"fmt"
+	"strings"
 
 	"github.com/E-Timileyin/sail/internal/config"
 	"github.com/E-Timileyin/sail/internal/logger"
 	"github.com/E-Timileyin/sail/internal/model"
+	"github.com/E-Timileyin/sail/internal/sshx"
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/ssh"
 )
 
-// deployCmd represents the deploy command
 var deployCmd = &cobra.Command{
-	Use:   "deploy [config-file]",
+	Use:   "deploy <config-file>",
 	Short: "Deploy containers to remote servers",
-	Long: `Deploy your application to one or more remote servers using SSH.
-The config file should contain server details and deployment settings.`,
+	Long: `Deploy your application to one or more remote servers over SSH.
+
+Host keys are verified against known_hosts. Use --accept-new to trust a host on
+first connect, the same way OpenSSH's StrictHostKeyChecking=accept-new does.`,
 	Args: cobra.ExactArgs(1),
 	RunE: runDeploy,
 }
 
 var (
-	dryRun     bool
-	skipBackup bool
+	dryRun         bool
+	acceptNewHost  bool
+	knownHostsPath string
 )
 
 func init() {
 	rootCmd.AddCommand(deployCmd)
 
-	// Add flags
-	deployCmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would be deployed without making changes")
-	deployCmd.Flags().BoolVar(&skipBackup, "skip-backup", false, "Skip creating backup of current deployment")
+	deployCmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show the plan without changing anything")
+	deployCmd.Flags().BoolVar(&acceptNewHost, "accept-new", false,
+		"Accept and record an unknown host key on first connect (like StrictHostKeyChecking=accept-new)")
+	deployCmd.Flags().StringVar(&knownHostsPath, "known-hosts", "",
+		"Path to known_hosts (default ~/.ssh/known_hosts)")
 }
 
-func runDeploy(_ *cobra.Command, args []string) error {
+// runDeploy reports failure honestly.
+//
+// This previously returned nil unconditionally while logging per-server errors, so a
+// deploy that failed on every server exited 0 and CI marked it green. Failures are now
+// aggregated and returned, and cmd.Execute turns a non-nil error into exit code 1.
+func runDeploy(cmd *cobra.Command, args []string) error {
 	configFile := args[0]
 	logger.Log.Infof("Starting deployment using config: %s", configFile)
 
-	// 1. Load server configuration
-	servers, err := config.LoadConfig(configFile)
+	cfg, err := config.Load(configFile)
 	if err != nil {
-		return fmt.Errorf("failed to load config: %v", err)
+		return err
+	}
+	servers := cfg.Servers
+
+	if err := config.EnsureKeyFilesReadable(servers); err != nil {
+		return err
 	}
 
-	// 2. Process each servere
+	policy := sshx.Strict
+	if acceptNewHost {
+		policy = sshx.AcceptNew
+		logger.Log.Warn("--accept-new is set: unknown host keys will be recorded in known_hosts")
+	}
+	for i := range servers {
+		servers[i].TrustPolicy = policy
+		servers[i].KnownHostsPath = knownHostsPath
+	}
+
+	var failed []string
 	for i := range servers {
 		server := &servers[i]
+
+		if dryRun {
+			// Short-circuit before any connection or mutation. Previously --dry-run was
+			// registered but never read, so passing it performed a real deploy.
+			logger.Log.Infof("[dry-run] would deploy to %s (%s) using key %s",
+				server.Name, server.Address(), server.KeyPath)
+			continue
+		}
+
 		logger.Log.Infof("Deploying to server: %s (%s)", server.Name, server.Host)
 
-		// 3. Create SSH client configuration
-		sshConfig, err := server.SSHConfig()
-		if err != nil {
-			logger.Log.Errorf("Failed to create SSH config for %s: %v", server.Name, err)
-			continue
-		}
-
-		// 4. Connect to the server
-		client, err := ssh.Dial("tcp", server.Address(), sshConfig)
-		if err != nil {
-			logger.Log.Errorf("Failed to connect to %s: %v", server.Address(), err)
-			continue
-		}
-		defer client.Close()
-
-		logger.Log.Infof("Successfully connected to %s", server.Address())
-
-		// 5. Execute deployment commands
-		if err := executeDeployment(client, server); err != nil {
+		if err := deployToServer(cmd, server); err != nil {
 			logger.Log.Errorf("Deployment failed on %s: %v", server.Name, err)
+			failed = append(failed, server.Name)
 			continue
 		}
-
 		logger.Log.Infof("Successfully deployed to %s", server.Name)
 	}
 
+	if dryRun {
+		logger.Log.Infof("[dry-run] no changes made")
+		return nil
+	}
+
+	if len(failed) > 0 {
+		return fmt.Errorf("deploy failed on %d/%d servers: %s",
+			len(failed), len(servers), strings.Join(failed, ", "))
+	}
 	return nil
 }
 
-// executeDeployment runs the deployment commands on the remote server
+// deployToServer runs the deploy for one server. Split out so the loop can count
+// failures without nested error handling.
+func deployToServer(cmd *cobra.Command, server *model.ServerStruct) error {
+	sshConfig, err := server.SSHConfig()
+	if err != nil {
+		return err
+	}
+
+	client, err := dial(cmd, server, sshConfig)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+
+	logger.Log.Debugf("Connected to %s", server.Address())
+
+	return executeDeployment(client, server)
+}
+
+// dial opens the SSH connection, turning the two trust failures into advice.
+func dial(_ *cobra.Command, server *model.ServerStruct, sshConfig *ssh.ClientConfig) (*ssh.Client, error) {
+	client, err := ssh.Dial("tcp", server.Address(), sshConfig)
+	if err != nil {
+		switch {
+		case sshx.IsKeyMismatchError(err):
+			return nil, fmt.Errorf(
+				"host key for %s does not match known_hosts — possible machine-in-the-middle; "+
+					"verify out of band, then run: ssh-keygen -R %s", server.Name, server.Host)
+		case sshx.IsUnknownHostError(err):
+			return nil, fmt.Errorf(
+				"host %s is not in known_hosts; pass --accept-new to trust it on first connect", server.Host)
+		}
+		return nil, fmt.Errorf("cannot connect to %s (%s): %w", server.Name, server.Address(), err)
+	}
+	return client, nil
+}
+
+// executeDeployment runs the deployment commands on the remote server.
 func executeDeployment(client *ssh.Client, _ *model.ServerStruct) error {
-	// Check if Docker is installed
-	if err := runCommand(client, "docker --version"); err != nil {
-		return fmt.Errorf("docker is not installed on the server: %v", err)
+	for _, check := range []struct{ name, cmd string }{
+		{"docker", "docker --version"},
+		{"docker compose", "docker compose version || docker-compose --version"},
+	} {
+		if err := runCommand(client, check.cmd); err != nil {
+			return fmt.Errorf("%s is not available on the server: %w", check.name, err)
+		}
 	}
 
-	// Check if Docker Compose is installed
-	if err := runCommand(client, "docker-compose --version"); err != nil {
-		return fmt.Errorf("docker-compose is not installed on the server: %v", err)
-	}
-
-	// Run the deployment commands
 	commands := []struct {
 		cmd         string
 		ignoreError bool
 	}{
-		{cmd: "echo '==> Starting deployment...'", ignoreError: false},
-		{cmd: "docker-compose pull", ignoreError: false},
-		{cmd: "docker-compose down", ignoreError: true}, // Ignore error if no containers are running
-		{cmd: "docker-compose up -d", ignoreError: false},
-		{cmd: "echo '==> Deployment completed successfully'", ignoreError: false},
+		{cmd: "docker compose pull", ignoreError: false},
+		{cmd: "docker compose down", ignoreError: true},
+		// --wait blocks on the container's HEALTHCHECK and exits non-zero if it never
+		// becomes healthy, so Sail does not need its own probe. See fixes.md.
+		{cmd: "docker compose up -d --wait", ignoreError: false},
 	}
 
-	for _, cmd := range commands {
-		logger.Log.Debugf("Executing: %s", cmd.cmd)
-
-		err := runCommand(client, cmd.cmd)
-		if err != nil && !cmd.ignoreError {
-			return fmt.Errorf("command failed: %s\nError: %v", cmd.cmd, err)
+	for _, c := range commands {
+		logger.Log.Debugf("Executing: %s", c.cmd)
+		if err := runCommand(client, c.cmd); err != nil && !c.ignoreError {
+			return fmt.Errorf("command failed: %s: %w", c.cmd, err)
 		}
-	}
-
-	// Verify the deployment
-	if err := verifyDeployment(client); err != nil {
-		return fmt.Errorf("deployment verification failed: %v", err)
 	}
 
 	return nil
 }
 
-// runCommand executes a single command on the remote server
+// runCommand executes one command over SSH, returning stderr in the error so failures
+// are diagnosable without a second round trip.
 func runCommand(client *ssh.Client, command string) error {
 	session, err := client.NewSession()
 	if err != nil {
-		return fmt.Errorf("failed to create session: %v", err)
+		return fmt.Errorf("cannot create session: %w", err)
 	}
 	defer session.Close()
 
@@ -132,29 +186,12 @@ func runCommand(client *ssh.Client, command string) error {
 	session.Stderr = &stderr
 
 	if err := session.Run(command); err != nil {
-		return fmt.Errorf("command failed: %s\nSTDOUT: %s\nSTDERR: %s",
-			command, stdout.String(), stderr.String())
+		return fmt.Errorf("%w\nSTDOUT: %s\nSTDERR: %s", err, stdout.String(), stderr.String())
 	}
 
 	logger.Log.Debugf("Command output:\n%s", stdout.String())
 	if stderr.Len() > 0 {
-		logger.Log.Warnf("Command warnings/errors:\n%s", stderr.String())
+		logger.Log.Warnf("Command stderr:\n%s", stderr.String())
 	}
-
-	return nil
-}
-
-// verifyDeployment checks if the deployment was successful
-func verifyDeployment(client *ssh.Client) error {
-	// Check if containers are running
-	if err := runCommand(client, "docker ps --filter 'status=running' --format '{{.Names}}'"); err != nil {
-		return fmt.Errorf("failed to check running containers: %v", err)
-	}
-
-	// You can add more verification steps here, for example:
-	// 1. Check if specific services are running
-	// 2. Make HTTP requests to verify endpoints
-	// 3. Check container logs for errors
-
 	return nil
 }
