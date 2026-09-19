@@ -6,8 +6,6 @@
 4. **`--force-rebuild`.** Building on the VPS is what you're avoiding. If the flag builds on the target, remove it. Builds happen locally or in CI, and the server only pulls.
 5. **README install path.** It says `go install github.com/E-Timileyin/sail@latest` and `git clone .../Sail.git`, but the repo is `Sail-CLI`. `go install` resolves from the module path in `go.mod`, so a mismatch breaks it. Check `go.mod` and fix one side.
 
-   **Status note (post-v0.1.0):** the module path *is* `github.com/E-Timileyin/sail` (`go.mod`), while the repo is `E-Timileyin/Sail-CLI`. `go install` resolves via the module path and then fetches from the corresponding VCS repo, so `go install github.com/E-Timileyin/sail@latest` cannot resolve — there is no repo at that path. The documented install command in the v0.1.0 release notes is therefore broken. Also note v0.1.0 shipped **no binary assets** and there is no GoReleaser config, so Release-based installs are not possible yet. Two fixes are needed, not one: (a) correct the module path or the documented path so they agree, and (b) add GoReleaser + a release workflow so CI installs a released binary instead of `go install`.
-
 ## What to change in the design
 
 - **Drive `docker compose`, not `docker run`.** Your `deployment.yaml` (image, ports, env, restartPolicy) can't express healthchecks, memory limits, per-project networks, or a DB container. Shrink the config to roughly `app`, `image`, `server`, `domain`, `port`, and let the compose file on the server carry the rest.
@@ -31,5 +29,3 @@ The reusable GitHub Actions workflow then downloads a released Sail binary and r
 ## Sequencing
 
 Don't block your projects on the rewrite. `bin/deploy` is 15 lines of bash and the model is the same. Run the bash version on the VPS now, ship real apps with it, and port each piece into Sail as it proves out. Doing it in that order means you build Sail against a design that has already survived production. Sail is worth the work because it's Go platform tooling you can show, but only if it ends up something you use yourself.
-
-To go further, paste the file where `deploy` builds and runs the container (probably under `internal/`). Does it run `docker run` or `docker compose`? That decides how big the change to the schema is.

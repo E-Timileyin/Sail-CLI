@@ -2,13 +2,13 @@
 
 - **Status:** Accepted
 - **Date:** 2025-11-23
-- **Supersedes:** `docs/fixes/03-unify-docker-daemon.md`
+- **Supersedes:** `docs/fixes/03-unify-docker-daemon.md` (removed; its proposal was rejected)
 - **Deciders:** project owner
 
 ## Context
 
-`fixes.md` and `docs/fixes/03-unify-docker-daemon.md` describe two different target
-architectures for the same problem, and both cannot hold:
+`fixes.md` and the rejected `docs/fixes/03-unify-docker-daemon.md` proposed two different
+target architectures for the same problem, and both cannot hold:
 
 - **`fixes.md`:** Sail drives `docker compose` on the target server, using
   `up -d --wait` for the health gate. A single binary serves both roles: a
@@ -16,7 +16,7 @@ architectures for the same problem, and both cannot hold:
   forced-command. The config shrinks to roughly `app`, `image`, `server`, `domain`,
   `port`; the compose file on the server carries healthchecks, resource limits and
   networks.
-- **`docs/fixes/03`:** point the Docker Go SDK at the remote daemon by constructing a
+- **`docs/fixes/03` (rejected):** point the Docker Go SDK at the remote daemon by constructing a
   client with host `ssh://user@host:port`, so `internal/workflows.Orchestrator` runs
   unchanged against production.
 

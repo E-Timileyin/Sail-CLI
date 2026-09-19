@@ -1,10 +1,4 @@
-# Default owner for everything in the repo.
-# Required because main's protection requires code-owner review; with no
-# CODEOWNERS file GitHub cannot resolve an owner and every PR is unmergeable.
 *       @E-Timileyin
 
-# CI and release config guard the supply chain (it holds the deploy key and
-# publish rights), so changes there are worth an explicit owner even if the
-# default above is ever widened.
-/.github/       @E-Timileyin
+/.github/         @E-Timileyin
 /.goreleaser.yaml @E-Timileyin
