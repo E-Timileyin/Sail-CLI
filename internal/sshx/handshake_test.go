@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/E-Timileyin/sail/internal/domain"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
 )
@@ -105,8 +106,8 @@ func TestHandshakeRejectsChangedHostKey(t *testing.T) {
 
 	for _, policy := range []struct {
 		name string
-		p    TrustPolicy
-	}{{"strict", Strict}, {"accept-new", AcceptNew}} {
+		p    domain.TrustPolicy
+	}{{"strict", domain.Strict}, {"accept-new", domain.AcceptNew}} {
 		t.Run(policy.name, func(t *testing.T) {
 			cb, err := HostKeyCallback(khPath, policy.p, addr)
 			if err != nil {
@@ -126,7 +127,7 @@ func TestHandshakeRejectsChangedHostKey(t *testing.T) {
 			if !IsKeyMismatchError(err) {
 				t.Errorf("expected a key-mismatch error, got: %v", err)
 			}
-			if policy.p == AcceptNew && !strings.Contains(err.Error(), "machine-in-the-middle") {
+			if policy.p == domain.AcceptNew && !strings.Contains(err.Error(), "machine-in-the-middle") {
 				t.Errorf("accept-new should surface the MITM warning, got: %v", err)
 			}
 		})
@@ -152,7 +153,7 @@ func TestHandshakeAcceptsKnownHost(t *testing.T) {
 		t.Fatalf("write known_hosts: %v", err)
 	}
 
-	cb, err := HostKeyCallback(khPath, Strict, addr)
+	cb, err := HostKeyCallback(khPath, domain.Strict, addr)
 	if err != nil {
 		t.Fatalf("HostKeyCallback: %v", err)
 	}
@@ -176,7 +177,7 @@ func TestHandshakeAcceptNewRecordsThenVerifies(t *testing.T) {
 	khPath := filepath.Join(t.TempDir(), "known_hosts")
 
 	for attempt := 1; attempt <= 2; attempt++ {
-		cb, err := HostKeyCallback(khPath, AcceptNew, addr)
+		cb, err := HostKeyCallback(khPath, domain.AcceptNew, addr)
 		if err != nil {
 			t.Fatalf("attempt %d: HostKeyCallback: %v", attempt, err)
 		}

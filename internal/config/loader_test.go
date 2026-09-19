@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/E-Timileyin/sail/internal/config"
-	"github.com/E-Timileyin/sail/internal/model"
+	"github.com/E-Timileyin/sail/internal/domain"
 )
 
 func writeConfig(t *testing.T, body string) string {
@@ -246,7 +246,7 @@ func TestEnsureKeyFilesReadable(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			err := config.EnsureKeyFilesReadable([]model.ServerStruct{{Name: "s", KeyPath: tc.path}})
+			err := config.EnsureKeyFilesReadable([]domain.Server{{Name: "s", KeyPath: tc.path}})
 			if tc.wantErr == "" {
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)

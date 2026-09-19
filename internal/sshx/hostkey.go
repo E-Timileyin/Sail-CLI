@@ -1,9 +1,3 @@
-// Package sshx owns Sail's SSH trust policy.
-//
-// Nothing outside this package should construct an ssh.ClientConfig. Host-key
-// verification is a property of the connection, not of a caller, so it must not be
-// duplicated at call sites — that is how the previous InsecureIgnoreHostKey() calls
-// survived in two places at once.
 package sshx
 
 import (
@@ -15,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/E-Timileyin/sail/internal/domain"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
 )
@@ -28,18 +23,6 @@ func DefaultKnownHostsPath() (string, error) {
 	return filepath.Join(home, ".ssh", "known_hosts"), nil
 }
 
-// TrustPolicy decides how to treat a host key that is not already in known_hosts.
-type TrustPolicy int
-
-const (
-	// Strict rejects unknown hosts. This is the default, matching OpenSSH's
-	// StrictHostKeyChecking=yes.
-	Strict TrustPolicy = iota
-	// AcceptNew records an unknown host's key on first use and accepts it, matching
-	// OpenSSH's StrictHostKeyChecking=accept-new. It is opt-in.
-	AcceptNew
-)
-
 // ErrUnknownHost is returned when a host's key is absent from known_hosts and the
 // policy is Strict.
 var ErrUnknownHost = errors.New("host key is not in known_hosts")
@@ -51,7 +34,7 @@ var ErrUnknownHost = errors.New("host key is not in known_hosts")
 // including under AcceptNew: trust-on-first-use may add a key, never replace one.
 // Silently accepting a changed key would defeat the purpose of pinning, so the
 // mismatch path returns a distinct, loud error.
-func HostKeyCallback(knownHostsPath string, policy TrustPolicy, addr string) (ssh.HostKeyCallback, error) {
+func HostKeyCallback(knownHostsPath string, policy domain.TrustPolicy, addr string) (ssh.HostKeyCallback, error) {
 	if knownHostsPath == "" {
 		p, err := DefaultKnownHostsPath()
 		if err != nil {
@@ -65,7 +48,7 @@ func HostKeyCallback(knownHostsPath string, policy TrustPolicy, addr string) (ss
 		return nil, err
 	}
 
-	if policy == Strict {
+	if policy == domain.Strict {
 		return base, nil
 	}
 	return tofuCallback(base, knownHostsPath, addr)
@@ -78,7 +61,7 @@ func HostKeyCallback(knownHostsPath string, policy TrustPolicy, addr string) (ss
 // Under AcceptNew that is recoverable — create an empty file and retry, since an empty
 // known_hosts is valid and rejects everything until a key is appended. Under Strict it
 // is a hard error with an actionable message.
-func loadKnownHosts(path string, policy TrustPolicy) (ssh.HostKeyCallback, error) {
+func loadKnownHosts(path string, policy domain.TrustPolicy) (ssh.HostKeyCallback, error) {
 	cb, err := knownhosts.New(path)
 	if err == nil {
 		return cb, nil
@@ -90,7 +73,7 @@ func loadKnownHosts(path string, policy TrustPolicy) (ssh.HostKeyCallback, error
 			path, err)
 	}
 
-	if policy == Strict {
+	if policy == domain.Strict {
 		return nil, fmt.Errorf(
 			"known_hosts not found at %s; create it, or pass --accept-new to trust the host on first connect: %w",
 			path, ErrUnknownHost)

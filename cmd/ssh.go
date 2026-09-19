@@ -6,7 +6,7 @@ import (
 	"os/exec"
 
 	"github.com/E-Timileyin/sail/internal/config"
-	"github.com/E-Timileyin/sail/internal/model"
+	"github.com/E-Timileyin/sail/internal/domain"
 	"github.com/spf13/cobra"
 )
 
@@ -23,7 +23,7 @@ var sshCmd = &cobra.Command{
 			return fmt.Errorf("failed to load config: %v", err)
 		}
 
-		var targetServer *model.ServerStruct
+		var targetServer *domain.Server
 		for i, s := range servers {
 			if s.Name == serverName {
 				targetServer = &servers[i]

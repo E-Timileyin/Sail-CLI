@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/E-Timileyin/sail/internal/model"
+	"github.com/E-Timileyin/sail/internal/domain"
 	"github.com/E-Timileyin/sail/internal/sshx"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
@@ -138,7 +138,7 @@ func serveConn(conn net.Conn, cfg *ssh.ServerConfig, commands map[string]string)
 }
 
 // serverWithKnownHosts builds a ServerStruct wired to a started test server.
-func serverWithKnownHosts(t *testing.T, srvAddr string, hostPub ssh.PublicKey, keyPath string) model.ServerStruct {
+func serverWithKnownHosts(t *testing.T, srvAddr string, hostPub ssh.PublicKey, keyPath string) domain.Server {
 	t.Helper()
 
 	host, portStr, err := net.SplitHostPort(srvAddr)
@@ -156,13 +156,13 @@ func serverWithKnownHosts(t *testing.T, srvAddr string, hostPub ssh.PublicKey, k
 		t.Fatalf("parse port: %v", err)
 	}
 
-	return model.ServerStruct{
+	return domain.Server{
 		Name:           "test",
 		Host:           host,
 		Port:           port,
 		User:           "deploy",
 		KeyPath:        keyPath,
-		TrustPolicy:    sshx.Strict,
+		TrustPolicy:    domain.Strict,
 		KnownHostsPath: khPath,
 	}
 }
@@ -223,13 +223,13 @@ func TestExecuteSSHCommandRejectsUnknownHost(t *testing.T) {
 		t.Fatalf("parse port: %v", err)
 	}
 
-	cfg := model.ServerStruct{
+	cfg := domain.Server{
 		Name:           "test",
 		Host:           host,
 		Port:           port,
 		User:           "deploy",
 		KeyPath:        keyPath,
-		TrustPolicy:    sshx.Strict,
+		TrustPolicy:    domain.Strict,
 		KnownHostsPath: filepath.Join(t.TempDir(), "empty_known_hosts"),
 	}
 	if err := os.WriteFile(cfg.KnownHostsPath, nil, 0o600); err != nil {
@@ -244,16 +244,16 @@ func TestExecuteSSHCommandRejectsUnknownHost(t *testing.T) {
 func TestExecuteSSHCommandHonoursTimeout(t *testing.T) {
 	// Not a timing test: asserts the config carries a bounded timeout, which is what
 	// stops a hung server from blocking a deploy indefinitely.
-	handler, err := (&model.ServerStruct{
+	handler, err := sshx.ClientConfig(&domain.Server{
 		Name:        "test",
 		Host:        "127.0.0.1",
 		Port:        1,
 		User:        "deploy",
 		KeyPath:     writeThrowawayKey(t),
-		TrustPolicy: sshx.Strict,
-	}).SSHConfig()
+		TrustPolicy: domain.Strict,
+	})
 	if err != nil {
-		t.Fatalf("SSHConfig: %v", err)
+		t.Fatalf("ClientConfig: %v", err)
 	}
 	if handler.Timeout <= 0 {
 		t.Error("SSH client config must set a bounded timeout")

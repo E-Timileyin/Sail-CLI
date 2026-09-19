@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/E-Timileyin/sail/internal/config"
+	"github.com/E-Timileyin/sail/internal/domain"
 	"github.com/E-Timileyin/sail/internal/logger"
-	"github.com/E-Timileyin/sail/internal/model"
 	"github.com/E-Timileyin/sail/internal/sshx"
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/ssh"
@@ -59,9 +59,9 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	policy := sshx.Strict
+	policy := domain.Strict
 	if acceptNewHost {
-		policy = sshx.AcceptNew
+		policy = domain.AcceptNew
 		logger.Log.Warn("--accept-new is set: unknown host keys will be recorded in known_hosts")
 	}
 	for i := range servers {
@@ -105,8 +105,8 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 
 // deployToServer runs the deploy for one server. Split out so the loop can count
 // failures without nested error handling.
-func deployToServer(cmd *cobra.Command, server *model.ServerStruct) error {
-	sshConfig, err := server.SSHConfig()
+func deployToServer(cmd *cobra.Command, server *domain.Server) error {
+	sshConfig, err := sshx.ClientConfig(server)
 	if err != nil {
 		return err
 	}
@@ -123,7 +123,7 @@ func deployToServer(cmd *cobra.Command, server *model.ServerStruct) error {
 }
 
 // dial opens the SSH connection, turning the two trust failures into advice.
-func dial(_ *cobra.Command, server *model.ServerStruct, sshConfig *ssh.ClientConfig) (*ssh.Client, error) {
+func dial(_ *cobra.Command, server *domain.Server, sshConfig *ssh.ClientConfig) (*ssh.Client, error) {
 	client, err := ssh.Dial("tcp", server.Address(), sshConfig)
 	if err != nil {
 		switch {
@@ -141,7 +141,7 @@ func dial(_ *cobra.Command, server *model.ServerStruct, sshConfig *ssh.ClientCon
 }
 
 // executeDeployment runs the deployment commands on the remote server.
-func executeDeployment(client *ssh.Client, _ *model.ServerStruct) error {
+func executeDeployment(client *ssh.Client, _ *domain.Server) error {
 	for _, check := range []struct{ name, cmd string }{
 		{"docker", "docker --version"},
 		{"docker compose", "docker compose version || docker-compose --version"},

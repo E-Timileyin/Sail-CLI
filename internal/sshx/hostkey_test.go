@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/E-Timileyin/sail/internal/domain"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
 )
@@ -58,7 +59,7 @@ func TestHostKeyCallback(t *testing.T) {
 
 	tests := []struct {
 		name            string
-		policy          TrustPolicy
+		policy          domain.TrustPolicy
 		known           map[string]ssh.PublicKey
 		connectAddr     string
 		presentedKey    ssh.PublicKey
@@ -68,14 +69,14 @@ func TestHostKeyCallback(t *testing.T) {
 	}{
 		{
 			name:         "matching key is accepted",
-			policy:       Strict,
+			policy:       domain.Strict,
 			known:        map[string]ssh.PublicKey{addr: good},
 			connectAddr:  addr,
 			presentedKey: good,
 		},
 		{
 			name:         "unknown host is rejected under strict policy",
-			policy:       Strict,
+			policy:       domain.Strict,
 			known:        map[string]ssh.PublicKey{"other.com:22": other},
 			connectAddr:  addr,
 			presentedKey: good,
@@ -83,7 +84,7 @@ func TestHostKeyCallback(t *testing.T) {
 		},
 		{
 			name:         "mismatched key is rejected even under accept-new",
-			policy:       AcceptNew,
+			policy:       domain.AcceptNew,
 			known:        map[string]ssh.PublicKey{addr: other},
 			connectAddr:  addr,
 			presentedKey: good,
@@ -92,7 +93,7 @@ func TestHostKeyCallback(t *testing.T) {
 		},
 		{
 			name:         "mismatched key is rejected under strict policy",
-			policy:       Strict,
+			policy:       domain.Strict,
 			known:        map[string]ssh.PublicKey{addr: other},
 			connectAddr:  addr,
 			presentedKey: good,
@@ -101,7 +102,7 @@ func TestHostKeyCallback(t *testing.T) {
 		},
 		{
 			name:         "unknown host is accepted under accept-new",
-			policy:       AcceptNew,
+			policy:       domain.AcceptNew,
 			known:        map[string]ssh.PublicKey{"other.com:22": other},
 			connectAddr:  addr,
 			presentedKey: good,
@@ -141,7 +142,7 @@ func TestAcceptNewAppendsUnknownHost(t *testing.T) {
 	key := testKey(t)
 	path := filepath.Join(t.TempDir(), "known_hosts")
 
-	cb, err := HostKeyCallback(path, AcceptNew, addr)
+	cb, err := HostKeyCallback(path, domain.AcceptNew, addr)
 	if err != nil {
 		t.Fatalf("HostKeyCallback: %v", err)
 	}
@@ -168,7 +169,7 @@ func TestAcceptNewAppendsUnknownHost(t *testing.T) {
 	}
 
 	// Rebuild the callback from the file: the recorded key must now verify.
-	cb2, err := HostKeyCallback(path, AcceptNew, addr)
+	cb2, err := HostKeyCallback(path, domain.AcceptNew, addr)
 	if err != nil {
 		t.Fatalf("HostKeyCallback (second): %v", err)
 	}
@@ -177,7 +178,7 @@ func TestAcceptNewAppendsUnknownHost(t *testing.T) {
 	}
 
 	// A different key must not be appended or accepted.
-	cb3, err := HostKeyCallback(path, AcceptNew, addr)
+	cb3, err := HostKeyCallback(path, domain.AcceptNew, addr)
 	if err != nil {
 		t.Fatalf("HostKeyCallback (third): %v", err)
 	}
@@ -192,7 +193,7 @@ func TestAcceptNewAppendsUnknownHost(t *testing.T) {
 
 func TestStrictPolicyRejectsMissingKnownHosts(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "does-not-exist")
-	_, err := HostKeyCallback(path, Strict, "example.com:22")
+	_, err := HostKeyCallback(path, domain.Strict, "example.com:22")
 	if err == nil {
 		t.Fatal("expected an error when known_hosts is missing under strict policy")
 	}
@@ -208,7 +209,7 @@ func TestAcceptNewCreatesMissingKnownHosts(t *testing.T) {
 	path := filepath.Join(dir, "nested", "known_hosts")
 	key := testKey(t)
 
-	cb, err := HostKeyCallback(path, AcceptNew, "new.example.com:22")
+	cb, err := HostKeyCallback(path, domain.AcceptNew, "new.example.com:22")
 	if err != nil {
 		t.Fatalf("accept-new should recover from a missing known_hosts: %v", err)
 	}
@@ -222,7 +223,7 @@ func TestAcceptNewCreatesMissingKnownHosts(t *testing.T) {
 
 func TestAcceptNewRequiresAddress(t *testing.T) {
 	path := writeKnownHosts(t, map[string]ssh.PublicKey{})
-	if _, err := HostKeyCallback(path, AcceptNew, "example.com"); err == nil {
+	if _, err := HostKeyCallback(path, domain.AcceptNew, "example.com"); err == nil {
 		t.Fatal("expected an error when addr has no port under accept-new")
 	}
 }

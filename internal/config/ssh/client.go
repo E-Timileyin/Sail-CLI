@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/E-Timileyin/sail/internal/model"
+	"github.com/E-Timileyin/sail/internal/domain"
 	"github.com/E-Timileyin/sail/internal/sshx"
 	"golang.org/x/crypto/ssh"
 )
@@ -21,7 +21,7 @@ type CommandResult struct {
 }
 
 // ExecuteSSHCommand executes a command on a remote server via SSH.
-func ExecuteSSHCommand(cfg model.ServerStruct, command string) (*CommandResult, error) {
+func ExecuteSSHCommand(cfg domain.Server, command string) (*CommandResult, error) {
 	result := &CommandResult{
 		Command: command,
 	}

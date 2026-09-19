@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/E-Timileyin/sail/internal/model"
+	"github.com/E-Timileyin/sail/internal/domain"
 	"github.com/spf13/viper"
 )
 
@@ -21,9 +21,9 @@ const CurrentVersion = 2
 
 // Config is the on-disk shape of config.yaml.
 type Config struct {
-	Version int                  `yaml:"version" mapstructure:"version"`
-	App     AppConfig            `yaml:"app" mapstructure:"app"`
-	Servers []model.ServerStruct `yaml:"servers" mapstructure:"servers"`
+	Version int             `yaml:"version" mapstructure:"version"`
+	App     AppConfig       `yaml:"app" mapstructure:"app"`
+	Servers []domain.Server `yaml:"servers" mapstructure:"servers"`
 }
 
 // AppConfig is non-secret application metadata.
@@ -33,7 +33,7 @@ type AppConfig struct {
 }
 
 // LoadConfig reads and validates the server configuration.
-func LoadConfig(configFile string) ([]model.ServerStruct, error) {
+func LoadConfig(configFile string) ([]domain.Server, error) {
 	cfg, err := Load(configFile)
 	if err != nil {
 		return nil, err
@@ -116,7 +116,7 @@ func validate(cfg *Config, v *viper.Viper) error {
 }
 
 // ServerNames returns configured server names, sorted, for error messages.
-func ServerNames(servers []model.ServerStruct) string {
+func ServerNames(servers []domain.Server) string {
 	names := make([]string, 0, len(servers))
 	for _, s := range servers {
 		names = append(names, s.Name)
@@ -129,7 +129,7 @@ func ServerNames(servers []model.ServerStruct) string {
 // readable. A private key with loose permissions is an ssh client error anyway; failing
 // here names the offending file instead of surfacing "permissions too open" from a
 // dial attempt.
-func EnsureKeyFilesReadable(servers []model.ServerStruct) error {
+func EnsureKeyFilesReadable(servers []domain.Server) error {
 	for _, s := range servers {
 		if s.KeyPath == "" {
 			continue
