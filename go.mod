@@ -2,6 +2,10 @@ module github.com/E-Timileyin/sail
 
 go 1.26.0
 
+// 1.26.6 is the oldest patch with no govulncheck-reachable stdlib findings
+// (GO-2026-5972). CI and release both resolve Go from this file.
+toolchain go1.26.6
+
 require (
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.10.1

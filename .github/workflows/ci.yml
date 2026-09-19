@@ -81,7 +81,27 @@ jobs:
       - name: govulncheck
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
-          govulncheck ./...
+          # Exit 3 means vulnerabilities were found, including ones unreachable from this
+          # code. Only reachable ones fail the job: the rest are toolchain findings nobody
+          # in this repo can act on, and failing on them leaves the gate permanently red.
+          # Any other non-zero exit is a real failure (bad install, scan crash) and must
+          # not be mistaken for a clean scan.
+          set +e
+          govulncheck ./... 2>&1 | tee /tmp/vuln.txt
+          status=${PIPESTATUS[0]}
+          set -e
+
+          if [ "$status" -ne 0 ] && [ "$status" -ne 3 ]; then
+            echo "::error::govulncheck failed to run (exit $status)."
+            exit "$status"
+          fi
+
+          if grep -qE "^Your code is affected by [1-9]" /tmp/vuln.txt; then
+            echo "::error::govulncheck found vulnerabilities reachable from this code."
+            exit 1
+          fi
+
+          echo "No vulnerabilities reachable from this code."
 
   goreleaser-check:
     name: goreleaser

@@ -149,7 +149,7 @@ These are **not implemented yet**. They are listed so the gap is visible, not cl
 - **Scaffolding**: `sail bootstrap`, `sail app new`, `sail init --stack go|node|next`.
 - **Pre/Post Deployment Hooks**.
 
-See `docs/fixes/README.md` for status and `fixes.md` for the roadmap.
+See `docs/adr/` for the accepted architecture decisions and `fixes.md` for the roadmap.
 
 ## 🔒 Security Best Practices
 
