@@ -18,14 +18,60 @@ jobs:
   verify:
     name: verify
     runs-on: ubuntu-latest
+    outputs:
+      # The release job needs the validated tag, not a re-read of the raw input.
+      tag: ${{ steps.tag.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
+
+      - name: Resolve the tag being released
+        id: tag
+        # workflow_dispatch takes a free-form string, so it is validated rather than
+        # trusted: it is used as a checkout ref and as the version in release notes.
+        run: |
+          tag="${{ inputs.tag || github.ref_name }}"
+          if ! printf '%s' "$tag" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::'$tag' is not a semver release tag of the form vX.Y.Z"
+            exit 1
+          fi
+          if ! git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "::error::tag '$tag' does not exist in this repository"
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Releasing $tag"
+
+      - name: Refuse to republish an existing release
+        # GoReleaser would otherwise fail late, after the build, or overwrite assets and
+        # leave two releases claiming the same version.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${{ steps.tag.outputs.tag }}"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::release $tag already exists. Delete it first, or cut a new tag."
+            exit 1
+          fi
+          echo "No existing release for $tag"
+
+      - name: Release metadata is coherent
+        # Fails on a bad tag, an install URL that cannot resolve, or release-specific
+        # wording in the permanent footer. Cheap, and runs before anything is published.
+        run: ./scripts/check-release-coherence.sh "${{ steps.tag.outputs.tag }}" "$GITHUB_REPOSITORY"
+
+      - name: GoReleaser config is valid
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: latest
+          args: check
+
       - run: go build ./...
       - run: go test ./... -race -count=1
 
@@ -61,10 +107,42 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Smoke-test the released binary
-        # A release whose artifact does not run is worse than no release, and this is the
-        # only step that proves the archive is usable.
+      - name: Smoke-test the published archive
+        # Downloads the artifact that was actually published and runs it. An earlier
+        # version rebuilt from source and executed that instead, which proved nothing
+        # about the archive: a corrupt tarball, a missing binary, or wrong archive
+        # permissions would all have passed.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          go build -ldflags "-X main.buildVersion=${{ inputs.tag || github.ref_name }}" -o /tmp/sail-smoke .
-          /tmp/sail-smoke --version
-          /tmp/sail-smoke --help >/dev/null
+          tag="${{ needs.verify.outputs.tag }}"
+          version="${tag#v}"
+          platform="linux_amd64"
+          archive="sail_${version}_${platform}.tar.gz"
+
+          mkdir -p /tmp/smoke && cd /tmp/smoke
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" \
+            --pattern "$archive" --pattern checksums.txt --clobber
+
+          echo "== verifying checksum =="
+          # Guard the empty case: if grep matches nothing, sha256sum reads no lines and
+          # exits 0, so a missing entry would look like a pass.
+          line="$(grep " $archive\$" checksums.txt || true)"
+          if [ -z "$line" ]; then
+            echo "::error::$archive is not listed in checksums.txt"
+            exit 1
+          fi
+          printf '%s\n' "$line" | sha256sum --check --strict -
+
+          echo "== extracting =="
+          tar -xzf "$archive"
+          test -x ./sail || { echo "::error::archive does not contain an executable 'sail'"; exit 1; }
+
+          echo "== running the published binary =="
+          ./sail --version
+          ./sail --help >/dev/null
+
+          # The version must match the tag, or users cannot tell which build they have.
+          ./sail --version | head -1 | grep -qF "sail ${tag} " \
+            || { echo "::error::sail --version does not report ${tag}"; ./sail --version; exit 1; }
+          echo "published archive verified: $archive"
