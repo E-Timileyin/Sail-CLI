@@ -12,11 +12,8 @@ import (
 
 // CurrentVersion is the config schema Sail accepts.
 //
-// Clean break (no compatibility shims): a config that does not declare this exact
-// version is rejected with an actionable message rather than silently reinterpreted.
-// v0.1.0 shipped no binary artifacts and advertised a `go install` path that does not
-// resolve, so there is no installed base whose config deserves lenient parsing — and a
-// permissive loader is how a plaintext password field survives unnoticed.
+// Clean break: an undeclared version is rejected, not reinterpreted. A permissive loader
+// is how a plaintext password field survives unnoticed.
 const CurrentVersion = 2
 
 // Config is the on-disk shape of config.yaml.
@@ -80,8 +77,8 @@ func validate(cfg *Config, v *viper.Viper) error {
 		return fmt.Errorf("config version %d is not supported (this build expects %d)", cfg.Version, CurrentVersion)
 	}
 
-	// Detect removed fields explicitly. Viper drops unknown keys silently, which would
-	// otherwise leave a user's credential sitting in a file they believe Sail reads.
+	// Viper drops unknown keys silently, which would leave a credential in a file the user
+	// believes Sail reads.
 	if v.InConfig("deployment") {
 		return fmt.Errorf(
 			"the `deployment:` block was removed in this release; per ADR 0001 the compose file on\n" +
@@ -125,10 +122,8 @@ func ServerNames(servers []domain.Server) string {
 	return strings.Join(names, ", ")
 }
 
-// EnsureKeyFilesReadable checks every configured key exists and is not group/world
-// readable. A private key with loose permissions is an ssh client error anyway; failing
-// here names the offending file instead of surfacing "permissions too open" from a
-// dial attempt.
+// EnsureKeyFilesReadable fails early on a missing or loosely-permissioned key, naming the
+// file instead of surfacing "permissions too open" from a dial attempt.
 func EnsureKeyFilesReadable(servers []domain.Server) error {
 	for _, s := range servers {
 		if s.KeyPath == "" {

@@ -1,3 +1,5 @@
+// Package sshx owns Sail's SSH trust policy and is the only place an ssh.ClientConfig is
+// built: verification duplicated across call sites is how InsecureIgnoreHostKey survived.
 package sshx
 
 import (
@@ -27,13 +29,10 @@ func DefaultKnownHostsPath() (string, error) {
 // policy is Strict.
 var ErrUnknownHost = errors.New("host key is not in known_hosts")
 
-// HostKeyCallback returns a callback verifying host keys against knownHostsPath.
+// HostKeyCallback verifies host keys against knownHostsPath.
 //
-// addr is the host:port the connection targets, used only under AcceptNew when a key
-// must be recorded. A key that does not match a recorded entry is always rejected,
-// including under AcceptNew: trust-on-first-use may add a key, never replace one.
-// Silently accepting a changed key would defeat the purpose of pinning, so the
-// mismatch path returns a distinct, loud error.
+// A key that does not match a recorded entry is rejected even under AcceptNew: tofu may
+// add a key, never replace one.
 func HostKeyCallback(knownHostsPath string, policy domain.TrustPolicy, addr string) (ssh.HostKeyCallback, error) {
 	if knownHostsPath == "" {
 		p, err := DefaultKnownHostsPath()
@@ -56,11 +55,8 @@ func HostKeyCallback(knownHostsPath string, policy domain.TrustPolicy, addr stri
 
 // loadKnownHosts builds the base verifier.
 //
-// knownhosts.New fails if the file does not exist. Verified against x/crypto: it
-// returns a nil callback and an error satisfying errors.Is(err, os.ErrNotExist).
-// Under AcceptNew that is recoverable — create an empty file and retry, since an empty
-// known_hosts is valid and rejects everything until a key is appended. Under Strict it
-// is a hard error with an actionable message.
+// knownhosts.New fails on a missing file (returns a nil callback, os.ErrNotExist). Empty
+// known_hosts is valid and rejects everything, so AcceptNew creates the file and retries.
 func loadKnownHosts(path string, policy domain.TrustPolicy) (ssh.HostKeyCallback, error) {
 	cb, err := knownhosts.New(path)
 	if err == nil {
@@ -95,15 +91,13 @@ func loadKnownHosts(path string, policy domain.TrustPolicy) (ssh.HostKeyCallback
 	return cb, nil
 }
 
-// tofuCallback wraps base so an unknown host is appended to known_hosts and then
-// accepted. A mismatched key is never appended.
+// tofuCallback records an unknown host, then accepts it. A mismatched key is never recorded.
 func tofuCallback(base ssh.HostKeyCallback, knownHostsPath, addr string) (ssh.HostKeyCallback, error) {
 	if _, _, err := net.SplitHostPort(addr); err != nil {
 		return nil, fmt.Errorf("--accept-new needs a host:port server address, got %q: %w", addr, err)
 	}
 
-	// One callback may serve several dial attempts, so addr is captured here rather
-	// than derived from the callback's arguments.
+	// Captured, not derived from the callback's arguments: a callback may serve several dials.
 	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
 		err := base(hostname, remote, key)
 		if err == nil {
@@ -115,12 +109,10 @@ func tofuCallback(base ssh.HostKeyCallback, knownHostsPath, addr string) (ssh.Ho
 			return err
 		}
 
-		// Want is non-empty when the host is known but presented a different key.
-		// Recording it would be a trust downgrade.
+		// Want non-empty means the host is known with a different key; recording it is a downgrade.
 		if len(keyErr.Want) > 0 {
-			// Wrap the original error so IsKeyMismatchError still finds it via
-			// errors.As. Dropping it would make the caller's mismatch branch dead
-			// code — silently losing the MITM warning on the one path that needs it.
+			// Wrap the original so IsKeyMismatchError finds it; dropping it makes the
+			// caller's MITM branch dead code.
 			return fmt.Errorf(
 				"REMOTE HOST IDENTIFICATION HAS CHANGED for %s: presented key does not match known_hosts. "+
 					"This may be a machine-in-the-middle attack. Verify the server key out of band, then run: ssh-keygen -R %s: %w",
@@ -135,8 +127,7 @@ func tofuCallback(base ssh.HostKeyCallback, knownHostsPath, addr string) (ssh.Ho
 	}, nil
 }
 
-// appendKnownHost appends one entry in ssh-keyscan's format: a bare host for port 22,
-// otherwise the bracketed [host]:port form. knownhosts.Line handles key serialisation.
+// appendKnownHost appends one entry: bare host for port 22, else [host]:port.
 func appendKnownHost(path, addr string, key ssh.PublicKey) error {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
@@ -161,8 +152,7 @@ func appendKnownHost(path, addr string, key ssh.PublicKey) error {
 	return err
 }
 
-// IsUnknownHostError reports an unknown-host rejection, so callers can suggest
-// --accept-new without parsing error strings.
+// IsUnknownHostError reports an unknown-host rejection, so callers can suggest --accept-new.
 func IsUnknownHostError(err error) bool {
 	var keyErr *knownhosts.KeyError
 	return errors.As(err, &keyErr) && len(keyErr.Want) == 0
