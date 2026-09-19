@@ -9,10 +9,8 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// ClientConfig builds an ssh.ClientConfig for a server.
-//
-// Here rather than on the domain type: it reads a private key and verifies host keys.
-// The only constructor of ssh.ClientConfig in the codebase.
+// ClientConfig is the codebase's only ssh.ClientConfig constructor. Here rather than on the
+// domain type: it reads a private key and verifies host keys.
 func ClientConfig(s *domain.Server) (*ssh.ClientConfig, error) {
 	authMethods, err := authMethods(s)
 	if err != nil {

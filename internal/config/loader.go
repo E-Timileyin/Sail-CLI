@@ -10,10 +10,9 @@ import (
 	"github.com/spf13/viper"
 )
 
-// CurrentVersion is the config schema Sail accepts.
-//
-// Clean break: an undeclared version is rejected, not reinterpreted. A permissive loader
-// is how a plaintext password field survives unnoticed.
+// CurrentVersion is the config schema Sail accepts. Clean break: an undeclared version is
+// rejected, not reinterpreted. A permissive loader is how a plaintext password field
+// survives unnoticed.
 const CurrentVersion = 2
 
 // Config is the on-disk shape of config.yaml.
@@ -29,7 +28,6 @@ type AppConfig struct {
 	Environment string `yaml:"environment" mapstructure:"environment"`
 }
 
-// LoadConfig reads and validates the server configuration.
 func LoadConfig(configFile string) ([]domain.Server, error) {
 	cfg, err := Load(configFile)
 	if err != nil {
@@ -38,7 +36,6 @@ func LoadConfig(configFile string) ([]domain.Server, error) {
 	return cfg.Servers, nil
 }
 
-// Load reads, version-checks and validates a config file.
 func Load(configFile string) (*Config, error) {
 	v := viper.New()
 	v.SetConfigType("yaml")
@@ -77,8 +74,8 @@ func validate(cfg *Config, v *viper.Viper) error {
 		return fmt.Errorf("config version %d is not supported (this build expects %d)", cfg.Version, CurrentVersion)
 	}
 
-	// Viper drops unknown keys silently, which would leave a credential in a file the user
-	// believes Sail reads.
+	// Viper drops unknown keys silently, leaving a credential in a file the user believes
+	// Sail reads.
 	if v.InConfig("deployment") {
 		return fmt.Errorf(
 			"the `deployment:` block was removed in this release; per ADR 0001 the compose file on\n" +
@@ -112,7 +109,6 @@ func validate(cfg *Config, v *viper.Viper) error {
 	return nil
 }
 
-// ServerNames returns configured server names, sorted, for error messages.
 func ServerNames(servers []domain.Server) string {
 	names := make([]string, 0, len(servers))
 	for _, s := range servers {
@@ -122,8 +118,8 @@ func ServerNames(servers []domain.Server) string {
 	return strings.Join(names, ", ")
 }
 
-// EnsureKeyFilesReadable fails early on a missing or loosely-permissioned key, naming the
-// file instead of surfacing "permissions too open" from a dial attempt.
+// EnsureKeyFilesReadable fails early on a missing or loose key, naming the file instead of
+// surfacing "permissions too open" from a dial attempt.
 func EnsureKeyFilesReadable(servers []domain.Server) error {
 	for _, s := range servers {
 		if s.KeyPath == "" {

@@ -13,7 +13,6 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// Result is the outcome of one remote command.
 type Result struct {
 	Command  string
 	Stdout   string
@@ -22,23 +21,18 @@ type Result struct {
 	Err      error
 }
 
-// Runner executes commands on one server over a single SSH connection.
 type Runner struct {
 	server *domain.Server
 	client *ssh.Client
 }
 
-// HandshakeTimeout bounds the SSH handshake after the TCP connection is established.
-//
-// ssh.ClientConfig.Timeout only covers the TCP dial: a server that accepts the connection
-// and then stalls leaves Dial blocked forever (verified). A stalled target is what an
-// overloaded deploy server looks like, so the handshake needs its own bound.
+// HandshakeTimeout bounds the SSH handshake.
+// ssh.ClientConfig.Timeout covers only the TCP dial: a server that accepts and then stalls
+// leaves Dial blocked forever (verified), and that is what an overloaded server looks like.
 var HandshakeTimeout = 30 * time.Second
 
-// Dial opens a connection to the server.
-//
-// The only ssh.Dial-equivalent in the codebase, so host-key verification cannot be skipped
-// by a caller building its own client config.
+// Dial is the only ssh.Dial-equivalent in the codebase, so host-key verification cannot be
+// skipped by a caller building its own client config.
 func Dial(s *domain.Server) (*Runner, error) {
 	cfg, err := sshx.ClientConfig(s)
 	if err != nil {
@@ -81,7 +75,6 @@ func Dial(s *domain.Server) (*Runner, error) {
 	return &Runner{server: s, client: ssh.NewClient(sshConn, chans, reqs)}, nil
 }
 
-// Close releases the connection.
 func (r *Runner) Close() error {
 	if r.client == nil {
 		return nil
@@ -89,7 +82,6 @@ func (r *Runner) Close() error {
 	return r.client.Close()
 }
 
-// Server returns the target this runner is connected to.
 func (r *Runner) Server() *domain.Server { return r.server }
 
 // Run executes a command.
@@ -128,15 +120,13 @@ func (r *Runner) Run(command string) Result {
 	return res
 }
 
-// MustRun runs a command and converts a non-zero exit into an error.
 func (r *Runner) MustRun(command string) error {
 	res := r.Run(command)
 	return res.Err
 }
 
-// WriteFile pipes content to a remote path over stdin, creating it 600.
-//
-// Over stdin, not embedded in the command: compose files contain shell metacharacters.
+// WriteFile pipes content over stdin, not embedded in the command: compose files contain
+// shell metacharacters.
 func (r *Runner) WriteFile(path, content string) error {
 	session, err := r.client.NewSession()
 	if err != nil {
@@ -154,10 +144,8 @@ func (r *Runner) WriteFile(path, content string) error {
 	return nil
 }
 
-// DefaultDeadline bounds a single remote command.
 const DefaultDeadline = 10 * time.Minute
 
-// SetImageRef records the image repository for an app on the server.
 func SetImageRef(r *Runner, l Layout, image string) error {
 	if image == "" {
 		return fmt.Errorf("image is required")
@@ -174,15 +162,12 @@ func (r *Runner) ImageRef(l Layout) (string, error) {
 	return strings.TrimSpace(res.Stdout), nil
 }
 
-// Quote single-quotes a string for safe interpolation into a POSIX shell command.
-//
-// Values reaching here come from config; unquoted, a crafted app name is a command
-// injection against the deploy server, which holds the secrets.
+// Quote single-quotes a string for a POSIX shell command. Values come from config;
+// unquoted, a crafted app name is command injection against the deploy server.
 func Quote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
-// SafePath joins base and name, rejecting names that could escape base.
 func SafePath(base, name string) (string, error) {
 	if name == "" {
 		return "", fmt.Errorf("name is required")

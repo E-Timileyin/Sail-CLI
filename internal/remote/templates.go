@@ -5,13 +5,9 @@ import (
 	"strings"
 )
 
-// ComposeTemplate is the compose file Sail writes for an app.
-//
-// It resolves ${APP_IMAGE}:${APP_TAG}, both supplied via the env files Sail passes on every
-// compose call. Secrets are not here: they come from .env on the server.
-//
-// The healthcheck is what `up -d --wait` gates on, so rollback depends on it. An app
-// scaffolded without one still deploys, but verification only confirms it started.
+// ComposeTemplate resolves ${APP_IMAGE}:${APP_TAG} from the env files Sail passes.
+// The healthcheck is what `up -d --wait` gates on, so rollback depends on it: without one,
+// verification only confirms the container started.
 func ComposeTemplate(app string, port int) string {
 	if port == 0 {
 		port = 8080
@@ -40,15 +36,10 @@ func ComposeTemplate(app string, port int) string {
 	return b.String()
 }
 
-// WriteFileScript writes stdin to a path, creating it 600.
-//
-// Content is piped over stdin rather than embedded in the command: a compose file holds
-// newlines and shell metacharacters, and interpolating it would be an injection risk.
 func WriteFileScript(path string) string {
 	return fmt.Sprintf("umask 077 && cat > %s && chmod 600 %s", Quote(path), Quote(path))
 }
 
-// MkdirScript creates a directory 700.
 func MkdirScript(dir string) string {
 	return fmt.Sprintf("mkdir -p %s && chmod 700 %s", Quote(dir), Quote(dir))
 }
@@ -59,9 +50,8 @@ func EnsureEnvScript(path string) string {
 		Quote(path), Quote(path), Quote(path))
 }
 
-// RemoveAppScript stops the app, then deletes its directory.
-//
-// Teardown runs before rm so a failure to stop does not delete the files needed to stop it.
+// RemoveAppScript tears down before rm, so a failure to stop does not delete the files
+// needed to stop it.
 func RemoveAppScript(l Layout) string {
 	return strings.Join([]string{
 		fmt.Sprintf("cd %s 2>/dev/null && docker compose -f %s --env-file %s --env-file %s down --remove-orphans || true",

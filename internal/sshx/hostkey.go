@@ -1,5 +1,5 @@
-// Package sshx owns Sail's SSH trust policy and is the only place an ssh.ClientConfig is
-// built: verification duplicated across call sites is how InsecureIgnoreHostKey survived.
+// Package sshx owns SSH trust policy, the only place an ssh.ClientConfig is built:
+// verification duplicated across call sites is how InsecureIgnoreHostKey survived.
 package sshx
 
 import (
@@ -16,7 +16,6 @@ import (
 	"golang.org/x/crypto/ssh/knownhosts"
 )
 
-// DefaultKnownHostsPath returns ~/.ssh/known_hosts.
 func DefaultKnownHostsPath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -25,14 +24,10 @@ func DefaultKnownHostsPath() (string, error) {
 	return filepath.Join(home, ".ssh", "known_hosts"), nil
 }
 
-// ErrUnknownHost is returned when a host's key is absent from known_hosts and the
-// policy is Strict.
 var ErrUnknownHost = errors.New("host key is not in known_hosts")
 
-// HostKeyCallback verifies host keys against knownHostsPath.
-//
-// A key that does not match a recorded entry is rejected even under AcceptNew: tofu may
-// add a key, never replace one.
+// HostKeyCallback rejects a key that does not match a recorded entry, even under AcceptNew:
+// trust-on-first-use may add a key, never replace one.
 func HostKeyCallback(knownHostsPath string, policy domain.TrustPolicy, addr string) (ssh.HostKeyCallback, error) {
 	if knownHostsPath == "" {
 		p, err := DefaultKnownHostsPath()
@@ -53,10 +48,8 @@ func HostKeyCallback(knownHostsPath string, policy domain.TrustPolicy, addr stri
 	return tofuCallback(base, knownHostsPath, addr)
 }
 
-// loadKnownHosts builds the base verifier.
-//
-// knownhosts.New fails on a missing file (returns a nil callback, os.ErrNotExist). Empty
-// known_hosts is valid and rejects everything, so AcceptNew creates the file and retries.
+// loadKnownHosts: knownhosts.New fails on a missing file (nil callback, os.ErrNotExist).
+// Empty known_hosts is valid and rejects everything, so AcceptNew creates it and retries.
 func loadKnownHosts(path string, policy domain.TrustPolicy) (ssh.HostKeyCallback, error) {
 	cb, err := knownhosts.New(path)
 	if err == nil {
@@ -91,7 +84,7 @@ func loadKnownHosts(path string, policy domain.TrustPolicy) (ssh.HostKeyCallback
 	return cb, nil
 }
 
-// tofuCallback records an unknown host, then accepts it. A mismatched key is never recorded.
+// tofuCallback records an unknown host then accepts it. A mismatched key is never recorded.
 func tofuCallback(base ssh.HostKeyCallback, knownHostsPath, addr string) (ssh.HostKeyCallback, error) {
 	if _, _, err := net.SplitHostPort(addr); err != nil {
 		return nil, fmt.Errorf("--accept-new needs a host:port server address, got %q: %w", addr, err)
@@ -127,7 +120,6 @@ func tofuCallback(base ssh.HostKeyCallback, knownHostsPath, addr string) (ssh.Ho
 	}, nil
 }
 
-// appendKnownHost appends one entry: bare host for port 22, else [host]:port.
 func appendKnownHost(path, addr string, key ssh.PublicKey) error {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
@@ -152,19 +144,16 @@ func appendKnownHost(path, addr string, key ssh.PublicKey) error {
 	return err
 }
 
-// IsUnknownHostError reports an unknown-host rejection, so callers can suggest --accept-new.
 func IsUnknownHostError(err error) bool {
 	var keyErr *knownhosts.KeyError
 	return errors.As(err, &keyErr) && len(keyErr.Want) == 0
 }
 
-// IsKeyMismatchError reports a changed-key rejection.
 func IsKeyMismatchError(err error) bool {
 	var keyErr *knownhosts.KeyError
 	return errors.As(err, &keyErr) && len(keyErr.Want) > 0
 }
 
-// NormalizeAddr formats a host/port pair as host:port.
 func NormalizeAddr(host string, port int) string {
 	if port == 0 {
 		port = 22

@@ -33,10 +33,9 @@ func newSigner(t *testing.T) (ssh.Signer, ssh.PublicKey) {
 	return signer, sshPub
 }
 
-// startSSHServer runs a real SSH server presenting the given host key, and returns its
-// address. This exercises the actual handshake rather than calling a callback by hand —
-// the first version of these tests passed while the deployment path could still not
-// reach the verification code at all.
+// startSSHServer runs a real SSH server presenting hostKey, exercising the actual
+// handshake. An earlier version called the callback by hand and passed while the deploy
+// path could not reach the verification code at all.
 func startSSHServer(t *testing.T, hostKey ssh.Signer) string {
 	t.Helper()
 
@@ -84,12 +83,9 @@ func knownHostsEntry(t *testing.T, addr string, key ssh.PublicKey) string {
 	return knownhosts.Line([]string{field}, key) + "\n"
 }
 
-// TestHandshakeRejectsChangedHostKey is the machine-in-the-middle test.
-//
-// A server presenting a key that differs from the recorded one must be rejected at
-// handshake, under both policies, and the presented key must not be recorded. This is
-// the behaviour the whole fix exists for, so it is tested against a real handshake
-// rather than a synthetic callback invocation.
+// TestHandshakeRejectsChangedHostKey is the machine-in-the-middle test: a server
+// presenting a key that differs from the recorded one must be rejected under both
+// policies, and the presented key must not be recorded.
 func TestHandshakeRejectsChangedHostKey(t *testing.T) {
 	legitSigner, legitPub := newSigner(t)
 	impostorSigner, _ := newSigner(t)

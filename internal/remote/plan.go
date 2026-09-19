@@ -14,34 +14,30 @@ type Layout struct {
 
 func (l Layout) Dir() string { return l.Root + "/" + l.App }
 
-// File returns the path of a state file inside the app directory.
 func (l Layout) File(name string) string { return l.Dir() + "/" + name }
 
 func (l Layout) CurrentTagPath() string  { return l.File(".tag") }
 func (l Layout) PreviousTagPath() string { return l.File(".tag.prev") }
 
-// EnvPath holds secrets, chmod 600. Sail references it, never writes secrets into it.
+// EnvPath holds secrets, chmod 600. Referenced, never written.
 func (l Layout) EnvPath() string { return l.File(".env") }
 
 func (l Layout) ComposePath() string { return l.File("compose.yaml") }
 func (l Layout) LogPath() string     { return l.File("deploy.log") }
 
-// TagEnvPath is generated per deploy and passed to compose as a second --env-file.
+// TagEnvPath is written per deploy and passed to compose as a second --env-file.
 func (l Layout) TagEnvPath() string { return l.File(".env.tag") }
 
-// ImageRefPath records the image repository so deploy does not need --image each time.
+// ImageRefPath avoids needing --image on every deploy.
 func (l Layout) ImageRefPath() string { return l.File(".image") }
 
-// compose builds a compose invocation.
-//
-// Both env files must be passed: without .env.tag, APP_TAG is unset and compose deploys
-// whatever tag the compose file pins while reporting success.
+// compose builds a compose invocation. Both env files are required: without .env.tag,
+// APP_TAG is unset and compose deploys whatever the compose file pins, reporting success.
 func (l Layout) compose(sub string) string {
 	return fmt.Sprintf("cd %s && docker compose -f %s --env-file %s --env-file %s %s",
 		Quote(l.Dir()), Quote(l.ComposePath()), Quote(l.EnvPath()), Quote(l.TagEnvPath()), sub)
 }
 
-// NewLayout validates the app name and builds its layout.
 func NewLayout(root, app string) (Layout, error) {
 	if err := ValidateAppName(app); err != nil {
 		return Layout{}, err
@@ -56,9 +52,7 @@ func NewLayout(root, app string) (Layout, error) {
 }
 
 // ValidateAppName rejects names that are not a single safe path segment.
-//
-// Rejected rather than merely quoted: the name reaches a remote shell, and a typo should
-// fail at the CLI instead of on the server.
+// Rejected, not merely quoted: the name reaches a remote shell.
 func ValidateAppName(app string) error {
 	if app == "" {
 		return fmt.Errorf("app name is required")
@@ -81,12 +75,10 @@ func ValidateAppName(app string) error {
 	return nil
 }
 
-// AppExistsScript reports whether an app directory already exists.
 func AppExistsScript(l Layout) string {
 	return fmt.Sprintf("test -d %s && echo exists || echo absent", Quote(l.Dir()))
 }
 
-// ReadStateScript prints the recorded state in one round trip.
 func ReadStateScript(l Layout) string {
 	return fmt.Sprintf(
 		"printf 'current=%%s\\n' \"$(cat %s 2>/dev/null || true)\"; "+
@@ -97,7 +89,6 @@ func ReadStateScript(l Layout) string {
 		Quote(l.ComposePath()), Quote(l.EnvPath()))
 }
 
-// State is what ReadStateScript reports.
 type State struct {
 	CurrentTag   string
 	PreviousTag  string
@@ -107,7 +98,6 @@ type State struct {
 	Unrecognised []string
 }
 
-// ParseState reads the output of ReadStateScript.
 func ParseState(out string) State {
 	st := State{RawOutput: out}
 	for _, line := range strings.Split(out, "\n") {
@@ -136,7 +126,6 @@ func ParseState(out string) State {
 	return st
 }
 
-// ValidateForDeploy rejects a server that is not ready, before anything is mutated.
 func (st State) ValidateForDeploy() error {
 	if !st.HasCompose {
 		return fmt.Errorf("no compose.yaml on the server; run `sail app new` to scaffold the app first")
@@ -147,13 +136,11 @@ func (st State) ValidateForDeploy() error {
 	return nil
 }
 
-// TargetIsCurrent reports whether the requested tag is already deployed.
 func (st State) TargetIsCurrent(tag string) bool {
 	return st.CurrentTag != "" && st.CurrentTag == tag
 }
 
 // PreflightScript checks the docker CLI and the compose v2 plugin.
-//
 // v1 (docker-compose) is not accepted: it lacks `up -d --wait`, so falling back to it
 // would silently remove the health gate.
 func PreflightScript() string {
@@ -161,7 +148,6 @@ func PreflightScript() string {
 }
 
 // DeployScript writes the target tag, pulls, then starts with --wait.
-//
 // The tag is written before pull because pull resolves APP_TAG from the override file.
 func DeployScript(l Layout, targetTag string) string {
 	return strings.Join([]string{
@@ -171,7 +157,6 @@ func DeployScript(l Layout, targetTag string) string {
 	}, " && ")
 }
 
-// RollbackScript restores a specific tag.
 func RollbackScript(l Layout, tag string) string {
 	return strings.Join([]string{
 		WriteEnvTag(l, tag),
@@ -179,13 +164,12 @@ func RollbackScript(l Layout, tag string) string {
 	}, " && ")
 }
 
-// WriteEnvTag writes APP_TAG to the generated override file.
 func WriteEnvTag(l Layout, tag string) string {
 	return fmt.Sprintf("printf 'APP_TAG=%%s\\n' %s > %s && chmod 600 %s",
 		Quote(tag), Quote(l.TagEnvPath()), Quote(l.TagEnvPath()))
 }
 
-// PromoteScript records a verified deploy: current becomes previous, then current is set.
+// PromoteScript records a verified deploy.
 //
 // Previous is written first so an interruption leaves a usable rollback target.
 func PromoteScript(l Layout, targetTag string) string {
@@ -199,18 +183,15 @@ func PromoteScript(l Layout, targetTag string) string {
 	}, " && ")
 }
 
-// HistoryScript appends one tab-separated line to the append-only deploy log.
 func HistoryScript(l Layout, targetTag, outcome string) string {
 	return fmt.Sprintf("printf '%%s\\t%%s\\t%%s\\n' \"$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)\" %s %s >> %s",
 		Quote(targetTag), Quote(outcome), Quote(l.LogPath()))
 }
 
-// SetupScript creates the app directory 700: it holds .env.
 func SetupScript(l Layout) string {
 	return fmt.Sprintf("mkdir -p %s && chmod 700 %s", Quote(l.Dir()), Quote(l.Dir()))
 }
 
-// ReadLogScript prints the last n lines of the deploy log.
 func ReadLogScript(l Layout, n int) string {
 	if n <= 0 {
 		n = 20
@@ -219,7 +200,6 @@ func ReadLogScript(l Layout, n int) string {
 		Quote(l.LogPath()), Quote(strconv.Itoa(n)), Quote(l.LogPath()))
 }
 
-// LogsScript tails the app's container logs.
 func LogsScript(l Layout, n int, follow bool) string {
 	if n <= 0 {
 		n = 100
@@ -231,19 +211,16 @@ func LogsScript(l Layout, n int, follow bool) string {
 	return l.compose("logs --tail " + strconv.Itoa(n) + flag)
 }
 
-// StatusScript reports the app's container status.
 func StatusScript(l Layout) string {
 	return l.compose("ps")
 }
 
-// SetImageRefScript records the image repository for the app.
 func SetImageRefScript(l Layout, image string) string {
 	return fmt.Sprintf("printf '%%s\\n' %s > %s.tmp && mv %s.tmp %s && chmod 600 %s",
 		Quote(image), Quote(l.ImageRefPath()), Quote(l.ImageRefPath()),
 		Quote(l.ImageRefPath()), Quote(l.ImageRefPath()))
 }
 
-// ReadImageRefScript prints the recorded image repository, if any.
 func ReadImageRefScript(l Layout) string {
 	return fmt.Sprintf("cat %s 2>/dev/null || true", Quote(l.ImageRefPath()))
 }

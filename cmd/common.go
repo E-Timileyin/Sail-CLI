@@ -6,9 +6,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// connect resolves config, picks a server, applies host-key flags and dials.
-//
-// Shared so trust flags and server selection cannot drift between commands.
+// connect is shared by every server-touching command so trust flags and server selection
+// cannot drift between them.
 func connect(configPath, serverName, remoteRoot, app string, acceptNew bool, knownHosts string) (*remote.Runner, remote.Layout, error) {
 	cfg, err := config.Load(configPath)
 	if err != nil {
@@ -36,7 +35,6 @@ func connect(configPath, serverName, remoteRoot, app string, acceptNew bool, kno
 	return runner, layout, nil
 }
 
-// addServerFlags registers the flags shared by every server-touching command.
 func addServerFlags(c *cobra.Command, configPath, serverName, remoteRoot *string, acceptNew *bool, knownHosts *string) {
 	c.Flags().StringVar(configPath, "config", "config.yaml", "Path to the config file")
 	c.Flags().StringVar(serverName, "server", "", "Server name from config (required unless the config has exactly one)")

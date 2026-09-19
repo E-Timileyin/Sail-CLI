@@ -17,7 +17,6 @@ var sshCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		serverName := args[0]
 
-		// Get server config
 		servers, err := config.LoadConfig("config.yaml")
 		if err != nil {
 			return fmt.Errorf("failed to load config: %v", err)
@@ -35,18 +34,15 @@ var sshCmd = &cobra.Command{
 			return fmt.Errorf("server '%s' not found in config", serverName)
 		}
 
-		// Build SSH command
 		sshArgs := []string{
 			"-p", fmt.Sprintf("%d", targetServer.Port),
 			fmt.Sprintf("%s@%s", targetServer.User, targetServer.Host),
 		}
 
-		// Add command if provided
 		if len(args) > 1 {
 			sshArgs = append(sshArgs, args[1:]...)
 		}
 
-		// Execute SSH
 		sshCmd := exec.Command("ssh", sshArgs...)
 		sshCmd.Stdin = os.Stdin
 		sshCmd.Stdout = os.Stdout

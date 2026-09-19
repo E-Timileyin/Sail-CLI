@@ -6,11 +6,8 @@ import (
 	"testing"
 )
 
-// fakeRunner records commands and returns scripted outcomes.
-//
-// This is the seam that lets the deploy state machine be tested without SSH or Docker.
-// The previous Orchestrator required a live daemon, which is why it was never tested and
-// never wired up.
+// fakeRunner is the seam that lets the deploy state machine be tested without SSH or
+// Docker. The previous Orchestrator needed a live daemon, so it was never tested.
 type fakeRunner struct {
 	commands []string
 	// respond returns an error for a matching command. First match wins.

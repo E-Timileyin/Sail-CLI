@@ -7,13 +7,9 @@ import (
 	"testing"
 )
 
-// TestNoInsecureIgnoreHostKey is a tripwire, not a unit test.
-//
-// ssh.InsecureIgnoreHostKey() accepts any host key, which lets a machine-in-the-middle
-// impersonate a production server for every command Sail runs against it. It appeared
-// twice in this codebase (internal/model/server.go and internal/config/ssh/client.go)
-// and survived unnoticed because the tests that would have caught it skipped without a
-// live server. This test fails the build on reintroduction instead.
+// TestNoInsecureIgnoreHostKey fails the build if the insecure callback returns.
+// It appeared twice before and survived unnoticed because the tests around it skipped
+// without a live server.
 func TestNoInsecureIgnoreHostKey(t *testing.T) {
 	root := repoRoot(t)
 
@@ -62,10 +58,8 @@ func TestNoInsecureIgnoreHostKey(t *testing.T) {
 	}
 }
 
-// TestAllClientConfigsVerifyHostKeys checks that every ssh.ClientConfig literal sets a
-// HostKeyCallback. A config with a nil callback causes the ssh package to fail closed,
-// but a config that explicitly sets an insecure callback does not — so this is the
-// companion check to TestNoInsecureIgnoreHostKey for the field itself.
+// TestAllClientConfigsVerifyHostKeys is the companion to the check above: a nil callback
+// fails closed, but a config naming an insecure one does not.
 func TestAllClientConfigsVerifyHostKeys(t *testing.T) {
 	root := repoRoot(t)
 

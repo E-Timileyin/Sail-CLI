@@ -45,8 +45,8 @@ func runRollback(cmd *cobra.Command, args []string) error {
 	}
 
 	if rollbackDryRun {
-		// The previous tag lives on the server, so a dry run cannot know it without
-		// connecting. It reports what it would do instead of guessing a tag.
+		// The previous tag lives on the server, so a dry run reports what it would do
+		// rather than guessing a tag.
 		logger.Log.Infof("[dry-run] would read %s on the server and redeploy the recorded previous tag",
 			remote.Layout{Root: rollbackRoot, App: app}.PreviousTagPath())
 		logger.Log.Info("[dry-run] no connection made, nothing changed")

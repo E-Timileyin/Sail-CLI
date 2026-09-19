@@ -85,7 +85,6 @@ func runAppNew(cmd *cobra.Command, args []string) error {
 	}
 
 	if appNewDryRun {
-		// The exact files, so they can be reviewed before anything is written.
 		logger.Log.Infof("[dry-run] would create %s on server %s", layout.Dir(), orAny(appNewServer, "(single configured server)"))
 		logger.Log.Infof("[dry-run] %s:\n%s", layout.ComposePath(), remote.ComposeTemplate(app, appNewPort))
 		logger.Log.Infof("[dry-run] %s: created empty and chmod 600 (existing files are never overwritten)", layout.EnvPath())
@@ -120,7 +119,6 @@ func runAppNew(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("cannot create %s: %w", layout.Dir(), err)
 	}
 
-	// One at a time, so a partial failure names the file.
 	if err := runner.WriteFile(layout.ComposePath(), remote.ComposeTemplate(app, appNewPort)); err != nil {
 		return err
 	}
@@ -154,8 +152,8 @@ func runAppRm(cmd *cobra.Command, args []string) error {
 	}
 
 	if !appRmYes {
-		// A refusal, not a dry run: removal deletes .env, which may hold secrets that exist
-		// nowhere else.
+		// A refusal, not a dry run: removal deletes .env, which may hold secrets that
+		// exist nowhere else.
 		return fmt.Errorf(
 			"refusing to remove app %q without --yes. This deletes %s, including any secrets in it",
 			app, layout.Dir())

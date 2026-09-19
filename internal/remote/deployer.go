@@ -5,31 +5,27 @@ import (
 	"strings"
 )
 
-// executor is the remote operations a deploy needs, so the sequence is testable without SSH.
+// executor lets the deploy sequence be tested without SSH.
 type executor interface {
 	Run(command string) Result
 	MustRun(command string) error
 }
 
-// Deployer executes a deploy against one server, with rollback on failure.
 type Deployer struct {
 	runner executor
 	layout Layout
 }
 
-// NewDeployer returns a Deployer for an app on a connected server.
 func NewDeployer(r *Runner, layout Layout) *Deployer {
 	return &Deployer{runner: r, layout: layout}
 }
 
-// newDeployerWith returns a Deployer over any executor. Used by tests.
 func newDeployerWith(r executor, layout Layout) *Deployer {
 	return &Deployer{runner: r, layout: layout}
 }
 
-// DeployOutcome describes what happened, including whether a rollback ran.
-//
-// A failed deploy that rolled back and one that could not are different results.
+// DeployOutcome records whether a rollback ran: a failed deploy that rolled back and one
+// that could not are different results.
 type DeployOutcome struct {
 	Tag string
 	// PreviousTag is the rollback target; meaningful only when Attempted is true.
@@ -41,8 +37,7 @@ type DeployOutcome struct {
 	FailedStage   string
 }
 
-// Deploy runs preflight, reads state, deploys, then promotes on success or rolls back.
-//
+// Deploy runs preflight, reads state, deploys, then promotes or rolls back.
 // Promote happens only after --wait passes, so a failed deploy leaves the previous tag
 // recorded as current — which is what makes rollback meaningful.
 func (d *Deployer) Deploy(targetTag string) (*DeployOutcome, error) {
@@ -104,7 +99,6 @@ func (d *Deployer) Deploy(targetTag string) (*DeployOutcome, error) {
 	return out, nil
 }
 
-// fail runs the rollback and annotates the outcome.
 func (d *Deployer) fail(out *DeployOutcome, cause error) (*DeployOutcome, error) {
 	if out.PreviousTag == "" {
 		// Nothing to roll back to; attempting it would obscure the original error.
@@ -128,7 +122,6 @@ func (d *Deployer) fail(out *DeployOutcome, cause error) (*DeployOutcome, error)
 	return out, fmt.Errorf("%w (rolled back to %q)", cause, out.PreviousTag)
 }
 
-// Rollback restores the previously deployed tag, without a preceding failed deploy.
 func (d *Deployer) Rollback() (*DeployOutcome, error) {
 	out := &DeployOutcome{}
 
@@ -165,14 +158,12 @@ func (d *Deployer) Rollback() (*DeployOutcome, error) {
 	return out, nil
 }
 
-// appendHistory records one line in the deploy log.
-//
-// Returned, not swallowed: the log is how an operator reconstructs what happened.
+// appendHistory errors are returned, not swallowed: the log is how an operator
+// reconstructs what happened.
 func (d *Deployer) appendHistory(tag, outcome string) error {
 	return d.runner.MustRun(HistoryScript(d.layout, tag, outcome))
 }
 
-// Trim limits s for log output.
 func Trim(s string) string {
 	s = strings.TrimSpace(s)
 	const max = 2000

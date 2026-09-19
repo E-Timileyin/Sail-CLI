@@ -132,7 +132,6 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// reportDeployFailure logs what the error alone does not convey.
 func reportDeployFailure(out *remote.DeployOutcome, serverName, app string) {
 	if out == nil {
 		return
@@ -157,7 +156,6 @@ func orNone(s string) string {
 	return s
 }
 
-// selectServer resolves the named server, or the only configured one.
 func selectServer(servers []domain.Server, name string) (*domain.Server, error) {
 	if name == "" {
 		if len(servers) == 1 {
@@ -176,7 +174,6 @@ func selectServer(servers []domain.Server, name string) (*domain.Server, error) 
 		name, config.ServerNames(servers))
 }
 
-// applyTrustFlags applies the host-key flags to a server.
 func applyTrustFlags(s *domain.Server, acceptNew bool, knownHosts string) {
 	if acceptNew {
 		s.TrustPolicy = domain.AcceptNew
@@ -184,8 +181,8 @@ func applyTrustFlags(s *domain.Server, acceptNew bool, knownHosts string) {
 	s.KnownHostsPath = knownHosts
 }
 
-// ensureAppScaffolded fails early when the app is missing: compose in a directory with no
-// compose file gives a confusing error from the remote shell.
+// ensureAppScaffolded fails early: compose in a directory with no compose file gives a
+// confusing error from the remote shell.
 func ensureAppScaffolded(runner *remote.Runner, layout remote.Layout, app string) error {
 	res := runner.Run(remote.ReadStateScript(layout))
 	if res.Err != nil {

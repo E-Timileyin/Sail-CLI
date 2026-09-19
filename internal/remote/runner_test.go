@@ -18,8 +18,7 @@ import (
 	"golang.org/x/crypto/ssh/knownhosts"
 )
 
-// testServer is an in-process SSH server that executes a canned response per command and
-// records what it was asked to run.
+// testServer executes a canned response per command and records what it was asked to run.
 type testServer struct {
 	addr    string
 	hostPub ssh.PublicKey
