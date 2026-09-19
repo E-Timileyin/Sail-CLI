@@ -1,0 +1,70 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to release (e.g. v0.1.1)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  # Releasable means CI is green on the tagged commit. Without this, a tag pushed to a
+  # broken commit produces a downloadable binary that does not work.
+  verify:
+    name: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: go build ./...
+      - run: go test ./... -race -count=1
+
+  release:
+    name: release
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Check the tag matches the module path
+        # go install resolves a module path against the repository URL. If the two
+        # disagree the release is installable only as a tarball, which is how v0.1.0
+        # shipped an install command that could not work.
+        run: |
+          module=$(go list -m)
+          echo "module path: $module"
+          if [ "$module" != "github.com/E-Timileyin/Sail-CLI" ] && [ "$module" != "github.com/E-Timileyin/sail" ]; then
+            echo "::warning::Module path '$module' does not match the repo URL. go install will not resolve."
+          fi
+
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Smoke-test the released binary
+        # A release whose artifact does not run is worse than no release, and this is the
+        # only step that proves the archive is usable.
+        run: |
+          go build -ldflags "-X main.buildVersion=${{ inputs.tag || github.ref_name }}" -o /tmp/sail-smoke .
+          /tmp/sail-smoke --version
+          /tmp/sail-smoke --help >/dev/null

@@ -1,0 +1,86 @@
+# GoReleaser configuration.
+# Validate locally with: goreleaser check
+# Dry-run a release with: goreleaser release --snapshot --clean
+version: 2
+
+project_name: sail
+
+before:
+  hooks:
+    - go mod tidy
+    - go test ./...
+
+builds:
+  - id: sail
+    main: .
+    binary: sail
+    env:
+      - CGO_ENABLED=0
+    # linux and darwin, amd64 and arm64. A deploy tool runs on the operator's machine and
+    # the target is a linux server, so windows is omitted deliberately.
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w
+      - -X main.buildVersion={{.Version}}
+      - -X github.com/E-Timileyin/sail/internal/version.Commit={{.Commit}}
+      - -X github.com/E-Timileyin/sail/internal/version.Date={{.CommitDate}}
+
+archives:
+  - id: sail
+    formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - README.md
+      - LICENSE
+      - config.yaml
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  # Group by the conventional-commit prefixes used in this repo, so release notes are
+  # readable without hand-editing.
+  groups:
+    - title: Security
+      regexp: '^.*?(security|fix\(security\)).*$'
+      order: 0
+    - title: Fixes
+      regexp: '^.*?fix.*$'
+      order: 1
+    - title: Features
+      regexp: '^.*?feat.*$'
+      order: 2
+    - title: Documentation
+      regexp: '^.*?docs.*$'
+      order: 3
+    - title: Other
+      order: 999
+  filters:
+    exclude:
+      - '^chore'
+      - '^style'
+      - '^Merge (branch|pull request)'
+      - '^test'
+
+release:
+  draft: false
+  prerelease: auto
+  footer: |
+    ## Install
+
+    ```bash
+    # Replace VERSION and PLATFORM with the values above
+    curl -sSL https://github.com/E-Timileyin/Sail-CLI/releases/download/{{ .Tag }}/sail_{{ .Version }}_linux_amd64.tar.gz \
+      | tar -xz sail
+    sudo mv sail /usr/local/bin/
+    sail --version
+    ```
+
+    Verify the checksum first if you prefer strict supply chain hygiene:
+    `checksums.txt` is attached to this release.
+
+    **This release changes the config schema.** `config.yaml` now requires `version: 2`,
+    and a v0.1.0 config is rejected with guidance rather than silently reinterpreted.
+    See the [README](https://github.com/E-Timileyin/Sail-CLI#readme) for the current schema.
