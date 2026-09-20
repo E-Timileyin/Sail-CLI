@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/E-Timileyin/sail/internal/logger"
 	"github.com/spf13/cobra"
 )
 
@@ -18,18 +17,10 @@ var serveCmd = &cobra.Command{
 	Short: "Start the application server",
 	Long:  `Start the HTTP/HTTPS server to serve the application.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if autoDeploy {
-			if err := runDeploy(cmd, []string{configFile}); err != nil {
-				return fmt.Errorf("deployment failed: %v", err)
-			}
-		}
-
-		logger.Log.Infof("Starting server on port %s...", serverPort)
-		// TODO: not implemented. serve is a stub; --deploy chains a deploy, then this
-		// prints and exits without listening.
-
-		logger.Log.Info("Server started successfully")
-		return nil
+		// serve is a stub: it never bound a socket, but used to log success and
+		// return nil (#19). Fail before --deploy so a supervisor cannot treat
+		// exit 0 as readiness, and so a deploy is not chained onto a lie.
+		return fmt.Errorf("sail serve is not implemented: no listener is bound on port %s", serverPort)
 	},
 }
 
